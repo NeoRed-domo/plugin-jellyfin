@@ -1,0 +1,131 @@
+import requests
+import time
+import sys
+import json
+import logging
+import argparse
+import os
+import signal
+
+# Configuration du logging par défaut
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s : %(message)s', stream=sys.stdout)
+
+def send_to_jeedom(callback_url, plugin_apikey, data):
+    """Envoie les données au fichier PHP d'écoute via POST"""
+    params = {
+        'apikey': plugin_apikey
+    }
+    
+    try:
+        # On envoie le JSON brut
+        response = requests.post(callback_url, params=params, json=data, timeout=2)
+        if response.status_code != 200:
+            logging.error(f"Erreur Jeedom: {response.status_code} - {response.text}")
+    except Exception as e:
+        logging.error(f"Impossible de contacter Jeedom: {e}")
+
+def get_jellyfin_sessions(jellyfin_url, jellyfin_token):
+    headers = {'X-Emby-Token': jellyfin_token, 'Content-Type': 'application/json'}
+    try:
+        # On nettoie l'URL au cas où il y aurait un slash à la fin
+        url = f"{jellyfin_url.rstrip('/')}/Sessions"
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            return r.json()
+        else:
+            logging.warning(f"Jellyfin répond {r.status_code}")
+    except Exception as e:
+        logging.error(f"Erreur connexion Jellyfin: {e}")
+    return []
+
+def write_pid(pid_file):
+    """Ecrit le PID du processus actuel dans un fichier pour que Jeedom sache qu'il tourne"""
+    try:
+        with open(pid_file, 'w') as f:
+            f.write(str(os.getpid()))
+    except Exception as e:
+        logging.error(f"Impossible d'écrire le fichier PID : {e}")
+        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser()
+    # Arguments Jellyfin
+    parser.add_argument("--jellyfin_url", required=True, help="URL du serveur Jellyfin")
+    parser.add_argument("--jellyfin_token", required=True, help="Clé API Jellyfin")
+    
+    # Arguments standards Jeedom
+    parser.add_argument("--callback", required=True, help="URL de retour vers Jeedom (jeeJellyfin.php)")
+    parser.add_argument("--apikey", required=True, help="Clé API du Plugin Jeedom")
+    parser.add_argument("--pid", required=True, help="Chemin du fichier PID")
+    parser.add_argument("--loglevel", default="info", help="Niveau de log")
+    parser.add_argument("--socket", help="Socket (non utilisé ici mais envoyé par Jeedom)")
+    
+    args = parser.parse_args()
+
+    # Configuration du niveau de log selon l'argument
+    numeric_level = getattr(logging, args.loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        numeric_level = logging.INFO
+    logging.getLogger().setLevel(numeric_level)
+
+    logging.info("--- Démarrage du Daemon Jellyfin (Refresh 1s) ---")
+    
+    # Ecriture du PID
+    write_pid(args.pid)
+    
+    # Boucle principale
+    while True:
+        try:
+            sessions = get_jellyfin_sessions(args.jellyfin_url, args.jellyfin_token)
+            payload_data = []
+
+            for session in sessions:
+                # Si pas de DeviceId, c'est une session système ou inutile
+                if 'DeviceId' not in session:
+                    continue
+                
+                # Récupération sécurisée des données
+                title = ''
+                status = 'Stopped'
+                run_time_ticks = 0
+                position_ticks = 0
+                
+                if 'NowPlayingItem' in session:
+                    title = session['NowPlayingItem'].get('Name', '')
+                    run_time_ticks = session['NowPlayingItem'].get('RunTimeTicks', 0)
+                    
+                    # Gestion Pause/Play
+                    play_state = session.get('PlayState', {})
+                    is_paused = play_state.get('IsPaused', False)
+                    status = 'Paused' if is_paused else 'Playing'
+                    
+                    # Gestion Position (Ticks brut pour précision PHP)
+                    position_ticks = play_state.get('PositionTicks', 0)
+
+                session_data = {
+                    'device_id': session['DeviceId'],
+                    'client': session.get('DeviceName', 'Jellyfin Client'),
+                    'title': title,
+                    'status': status,
+                    'run_time_ticks': run_time_ticks,
+                    'position_ticks': position_ticks
+                }
+                payload_data.append(session_data)
+
+            # On envoie s'il y a des données (clients connectés)
+            if payload_data:
+                # logging.debug(f"Envoi de {len(payload_data)} sessions à Jeedom") # Commenté pour éviter le spam logs
+                send_to_jeedom(args.callback, args.apikey, payload_data)
+            
+            # MISE A JOUR : Pause de 1 seconde seulement pour la réactivité demandée
+            time.sleep(1)
+
+        except KeyboardInterrupt:
+            logging.info("Arrêt demandé par l'utilisateur")
+            sys.exit(0)
+        except Exception as e:
+            logging.error(f"Crash boucle: {e}")
+            time.sleep(5)
+
+if __name__ == "__main__":
+    main()
