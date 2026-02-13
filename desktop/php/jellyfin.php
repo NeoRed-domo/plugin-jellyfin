@@ -102,7 +102,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <div class="form-group">
                             <label class="col-sm-3 control-label">{{Afficher le liseré}}</label>
                             <div class="col-sm-3">
-                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="widget_border_enable" checked />{{Activer}}</label>
+                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="widget_border_enable" />{{Activer}}</label>
                             </div>
                         </div>
 
@@ -144,9 +144,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
         if (_eqLogic.configuration.widget_border_color == undefined || _eqLogic.configuration.widget_border_color == '') {
             $('.eqLogicAttr[data-l2key=widget_border_color]').val('#e5e5e5');
         }
-        // Gestion de la case à cocher par défaut (si jamais définie, on l'active)
+        // Gestion de la case à cocher par défaut (MODIFICATION : décoché par défaut)
         if (_eqLogic.configuration.widget_border_enable == undefined) {
-            $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', true);
+            $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', false);
         }
     }
 </script>

@@ -148,14 +148,12 @@ class jellyfin extends eqLogic {
 
             if (empty($deviceId)) continue;
 
-            // Vérification si contrôlable
             $isControllable = false;
             if (isset($sessionData['SupportsRemoteControl']) && $sessionData['SupportsRemoteControl'] === true) $isControllable = true;
             if (isset($sessionData['supports_remote_control']) && $sessionData['supports_remote_control'] === true) $isControllable = true;
 
             if (!$isControllable) continue;
 
-            // Création / Récupération de l'équipement
             $logicalId = $deviceId;
             if (strlen($deviceId) > 120) $logicalId = md5($deviceId);
 
@@ -166,6 +164,11 @@ class jellyfin extends eqLogic {
                 $eqLogic->setLogicalId($logicalId);
                 $eqLogic->setEqType_name('jellyfin');
                 $eqLogic->setConfiguration('device_id', $deviceId);
+                
+                // --- INITIALISATION PAR DEFAUT : LISERÉ DÉSACTIVÉ ---
+                $eqLogic->setConfiguration('widget_border_enable', 0); 
+                $eqLogic->setConfiguration('widget_border_color', '#e5e5e5');
+                
                 $eqLogic->setIsEnable(1);
                 $eqLogic->setIsVisible(1);
                 $eqLogic->save();
@@ -186,11 +189,9 @@ class jellyfin extends eqLogic {
             if (!$hasMedia) {
                 $statusStr = 'Stopped';
                 $sessionData['title'] = ''; 
-                $eqLogic->checkAndUpdateCmd('media_type', ''); // Reset type si rien ne joue
+                $eqLogic->checkAndUpdateCmd('media_type', '');
             } else {
-                // --- NOUVELLE FONCTIONNALITE : DETECTION TYPE MEDIA ---
                 $mediaPath = isset($npItem['Path']) ? $npItem['Path'] : '';
-                // Fallback : parfois le path n'est pas dans NowPlayingItem direct
                 if (empty($mediaPath) && isset($sessionData['full_now_playing_item']['Path'])) {
                     $mediaPath = $sessionData['full_now_playing_item']['Path'];
                 }
@@ -232,12 +233,9 @@ class jellyfin extends eqLogic {
                 $eqLogic->checkAndUpdateCmd('position_num', gmdate("His", $currentSeconds));
                 $eqLogic->checkAndUpdateCmd('remaining_num', gmdate("His", $remainingSeconds));
 
-                // --- GESTION IMAGES SIMPLE (Sans LAG) ---
                 $itemType = isset($npItem['Type']) ? $npItem['Type'] : 'Unknown';
-                
                 $imageItemId = '';
                 
-                // Priorité des IDs
                 if (isset($npItem['SeriesId'])) {
                     $imageItemId = $npItem['SeriesId'];
                 } elseif (isset($npItem['AlbumId'])) {
@@ -250,7 +248,6 @@ class jellyfin extends eqLogic {
                     $imageItemId = $sessionData['item_id'];
                 }
 
-                // CORRECTION SPECIFIQUE MUSIQUE
                 if ($itemType == 'Audio' && !isset($npItem['AlbumId']) && !isset($npItem['PrimaryImageItemId'])) {
                     $imageItemId = ''; 
                 }
@@ -273,7 +270,6 @@ class jellyfin extends eqLogic {
                 }
             }
             
-            // Icone Play/Pause
             $cmdToggle = $eqLogic->getCmd(null, 'play_pause');
             if (is_object($cmdToggle)) {
                 $iconPlay = '<i class="fas fa-play-circle"></i>';
@@ -287,18 +283,9 @@ class jellyfin extends eqLogic {
         }
     }
 
-    /**
-     * Détermine le type de média en fonction du chemin du fichier et de la configuration du plugin
-     * @param string $path Chemin du fichier (ex: /media/films/avatar.mkv)
-     * @return string Type détecté (Film, Série, Audio, Publicité, etc.) ou 'Autre'
-     */
     private static function determineMediaType($path) {
         if (empty($path)) return 'Autre';
-
-        $path = strtolower($path); // Tout en minuscule pour la comparaison
-
-        // Ordre de priorité des vérifications
-        // Clé de config => Libellé de retour
+        $path = strtolower($path);
         $checkOrder = [
             'filter_ad'            => 'Publicité',
             'filter_sound_trailer' => 'Sound Trailer',
@@ -307,22 +294,17 @@ class jellyfin extends eqLogic {
             'filter_series'        => 'Série',
             'filter_audio'         => 'Audio'
         ];
-
         foreach ($checkOrder as $configKey => $typeLabel) {
             $keywords = config::byKey($configKey, 'jellyfin');
             if (empty($keywords)) continue;
-
-            // On gère les listes séparées par des virgules
             $keywordArray = explode(',', $keywords);
             foreach ($keywordArray as $word) {
                 $word = trim(strtolower($word));
                 if (!empty($word) && strpos($path, $word) !== false) {
-                    // Match trouvé !
                     return $typeLabel;
                 }
             }
         }
-
         return 'Autre';
     }
 
@@ -350,13 +332,12 @@ class jellyfin extends eqLogic {
             'Position_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 14, 'name' => 'Position (Scenario)'],
             'Remaining_Num'=> ['type' => 'info', 'subtype' => 'string', 'order' => 15, 'name' => 'Restant (Scenario)'],
             'Media_Type'   => ['type' => 'info', 'subtype' => 'string', 'order' => 16, 'name' => 'Type de média'],
-            'Set_Position' => ['type' => 'action', 'subtype' => 'slider', 'order' => 99, 'name' => 'Définir Position', 'isVisible' => 0], // Nom corrigé
+            'Set_Position' => ['type' => 'action', 'subtype' => 'slider', 'order' => 99, 'name' => 'Définir Position', 'isVisible' => 0],
         ];
 
         foreach ($commands as $name => $options) {
             $logicalId = strtolower($name);
             $cmd = $this->getCmd(null, $logicalId);
-            
             if (!is_object($cmd)) {
                 $cmd = new jellyfinCmd();
                 $cmd->setName(isset($options['name']) ? $options['name'] : $name);
@@ -378,61 +359,30 @@ class jellyfin extends eqLogic {
         $apikey   = config::byKey('jellyfin_apikey', 'jellyfin');
         $deviceId = $this->getConfiguration('device_id');
         
-        // LOGS ENRICHIS POUR DEBUG
-        log::add('jellyfin', 'info', "Action reçue: " . $commandName . " | DeviceID: " . $deviceId);
-        log::add('jellyfin', 'debug', "Payload Options: " . json_encode($_options));
-
-        if (empty($ip) || empty($deviceId)) {
-            log::add('jellyfin', 'error', "Echec: IP ou Device ID manquant dans la config.");
-            return;
-        }
+        if (empty($ip) || empty($deviceId)) return;
 
         $baseUrl = (strpos($ip, 'http') === false) ? 'http://' . $ip . ':' . $port : $ip . ':' . $port;
-        
         $sessionData = self::getSessionDataFromDeviceId($baseUrl, $apikey, $deviceId);
 
-        if (!$sessionData || !isset($sessionData['Id'])) {
-            log::add('jellyfin', 'warning', "Impossible de trouver une session active pour ce DeviceID (" . $deviceId . "). Le lecteur est-il en train de jouer ?");
-            // On loggue les sessions dispos pour comprendre
-            $allSessions = self::requestApi($baseUrl . '/Sessions?api_key=' . $apikey);
-            log::add('jellyfin', 'debug', "Liste des sessions retournées par l'API : " . json_encode($allSessions));
-            return;
-        }
+        if (!$sessionData || !isset($sessionData['Id'])) return;
 
         $sessionId = $sessionData['Id'];
         $isPaused = isset($sessionData['PlayState']['IsPaused']) ? $sessionData['PlayState']['IsPaused'] : false;
-        
-        log::add('jellyfin', 'debug', "Session trouvée (ID: $sessionId). Traitement de la commande...");
 
-        // Cas spécifique pour le changement de position (Seek)
         if ($commandName == 'set_position') {
-            $seconds = null;
-            
-            // On cherche la valeur dans slider OU dans value
-            if (isset($_options['slider'])) {
-                $seconds = $_options['slider'];
-            } elseif (isset($_options['value'])) {
-                $seconds = $_options['value'];
-            }
-            
+            $seconds = isset($_options['slider']) ? $_options['slider'] : (isset($_options['value']) ? $_options['value'] : null);
             if ($seconds !== null) {
-                // Jellyfin attend des ticks (1 seconde = 10,000,000 ticks)
                 $ticks = $seconds * 10000000;
-                log::add('jellyfin', 'info', "Envoi commande Seek vers Jellyfin : " . $seconds . "s (" . $ticks . " ticks)");
-                
                 $url = $baseUrl . '/Sessions/' . $sessionId . '/Playing/Seek?seekPositionTicks=' . $ticks . '&api_key=' . $apikey;
-                $res = self::requestApi($url, 'POST');
-                log::add('jellyfin', 'debug', "Réponse API Seek : " . json_encode($res));
-            } else {
-                log::add('jellyfin', 'warning', "Commande Set Position reçue mais aucune valeur (slider/value) trouvée dans les options.");
+                self::requestApi($url, 'POST');
             }
             return;
         }
 
         $action = '';
         switch ($commandName) {
-            case 'play':       $action = (!$isPaused) ? 'Unpause' : 'Unpause'; break; // Force unpause
-            case 'pause':      $action = ($isPaused) ? 'Pause' : 'Pause'; break; 
+            case 'play':       $action = 'Unpause'; break;
+            case 'pause':      $action = 'Pause'; break; 
             case 'play_pause': $action = 'PlayPause'; break;
             case 'stop':       $action = 'Stop'; break;
             case 'next':       $action = 'NextTrack'; break;
@@ -441,7 +391,6 @@ class jellyfin extends eqLogic {
 
         if ($action != '') {
             $url = $baseUrl . '/Sessions/' . $sessionId . '/Playing/' . $action . '?api_key=' . $apikey;
-            log::add('jellyfin', 'info', "Envoi commande standard : " . $action);
             self::requestApi($url, 'POST');
         }
     }
@@ -451,10 +400,7 @@ class jellyfin extends eqLogic {
         $sessions = self::requestApi($url);
         if (is_array($sessions)) {
             foreach ($sessions as $session) {
-                // Parfois DeviceId peut être sensible à la casse ou au format
-                if (isset($session['DeviceId']) && $session['DeviceId'] == $deviceId) {
-                    return $session;
-                }
+                if (isset($session['DeviceId']) && $session['DeviceId'] == $deviceId) return $session;
             }
         }
         return null;
@@ -465,11 +411,7 @@ class jellyfin extends eqLogic {
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-
-        if (!$binary) {
-             curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
-        }
-
+        if (!$binary) curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
         if ($method == 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
             if ($data) {
@@ -479,22 +421,11 @@ class jellyfin extends eqLogic {
                 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Length: 0']);
             }
         }
-
         $result = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-
-        if ($httpCode == 404 && strpos($url, '/Images/') !== false) {
-            log::add('jellyfin', 'debug', "Image introuvable (404) : $url");
-            return null;
-        }
-        if ($httpCode >= 400) {
-            log::add('jellyfin', 'error', "Erreur API ($httpCode) : $url");
-            return null;
-        }
-
+        if ($httpCode >= 400) return null;
         if ($binary) return $result;
-
         return json_decode($result, true);
     }
 
@@ -502,20 +433,14 @@ class jellyfin extends eqLogic {
 
     public function toHtml($_version = 'dashboard') {
         $replace = $this->preToHtml($_version);
-        if (!is_array($replace)) {
-            return $replace;
-        }
+        if (!is_array($replace)) return $replace;
         $version = jeedom::versionAlias($_version);
-        if ($this->getDisplay('hideOn' . $version) == 1) {
-            return '';
-        }
+        if ($this->getDisplay('hideOn' . $version) == 1) return '';
 
         // --- GESTION DU LISERÉ ---
-        // On vérifie si le liseré est activé (activé par défaut si non défini)
-        if ($this->getConfiguration('widget_border_enable', 1) == 1) {
+        if ($this->getConfiguration('widget_border_enable', 0) == 1) {
             $replace['#widget_border_color#'] = $this->getConfiguration('widget_border_color', '#e5e5e5');
         } else {
-            // Si désactivé, on met 'transparent' pour garder l'épaisseur du trait sans le voir
             $replace['#widget_border_color#'] = 'transparent';
         }
         
@@ -523,12 +448,9 @@ class jellyfin extends eqLogic {
             $replace['#' . $cmd->getLogicalId() . '#'] = $cmd->execCmd();
             $replace['#' . $cmd->getLogicalId() . '_id#'] = $cmd->getId();
         }
-        
-        // On passe les ID des commandes d'action pour le JS
         foreach ($this->getCmd('action') as $cmd) {
             $replace['#' . $cmd->getLogicalId() . '_id#'] = $cmd->getId();
         }
-
         return $this->postToHtml($_version, template_replace($replace, getTemplate('core', $version, 'jellyfin', 'jellyfin')));
     }
 }
