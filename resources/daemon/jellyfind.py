@@ -31,7 +31,7 @@ def send_to_jeedom(callback_url, plugin_apikey, data):
     """Envoie les données au fichier PHP d'écoute via POST"""
     params = {'apikey': plugin_apikey}
     try:
-        response = requests.post(callback_url, params=params, json=data, timeout=2)
+        response = requests.post(callback_url, params=params, json=data, timeout=1) # Timeout réduit pour la réactivité
         if response.status_code != 200:
             logging.error(f"Erreur Jeedom: {response.status_code} - {response.text}")
     except Exception as e:
@@ -43,7 +43,7 @@ def get_jellyfin_sessions(jellyfin_url, jellyfin_token):
     url = f"{jellyfin_url.rstrip('/')}/Sessions"
     
     try:
-        r = requests.get(url, headers=headers, timeout=5)
+        r = requests.get(url, headers=headers, timeout=2) # Timeout court pour ne pas bloquer la boucle
         if r.status_code == 200:
             return r.json()
         else:
@@ -79,7 +79,6 @@ def main():
     args = parser.parse_args()
 
     # 2. Configuration du Logging
-    # On configure pour écrire sur la sortie standard (console)
     numeric_level = getattr(logging, args.loglevel.upper(), logging.INFO)
     logging.basicConfig(
         level=numeric_level,
@@ -92,7 +91,12 @@ def main():
     
     # 3. Initialisation
     write_pid(args.pid)
-    TARGET_CYCLE = 1.0
+    
+    # MODIFICATION : Cycle très court pour une haute réactivité de l'interface
+    TARGET_CYCLE = 0.5 
+
+    # Mémoire des appareils actifs lors du cycle précédent {device_id: device_name}
+    known_devices = {} 
 
     # 4. Boucle Principale
     while not shutdown_flag:
@@ -102,27 +106,27 @@ def main():
             # Récupération
             sessions = get_jellyfin_sessions(args.jellyfin_url, args.jellyfin_token)
             payload_data = []
+            current_cycle_devices = {}
 
-            # Traitement
+            # Traitement des sessions actives
             for session in sessions:
                 if 'DeviceId' not in session: continue
+                
+                dev_id = session['DeviceId']
+                dev_name = session.get('DeviceName', 'Jellyfin Client')
+                
+                # On mémorise que cet appareil est actif ce tour-ci
+                current_cycle_devices[dev_id] = dev_name
                 
                 # Extraction des données utiles
                 now_playing = session.get('NowPlayingItem', {})
                 play_state = session.get('PlayState', {})
                 
-                # On construit le paquet pour Jeedom
-                # MODIFICATION IMPORTANTE : On envoie les objets complets 'NowPlayingItem' et 'PlayState'
-                # Cela permet au PHP de récupérer l'AlbumId, ParentId, etc.
                 session_data = {
-                    'device_id': session['DeviceId'],
-                    'client': session.get('DeviceName', 'Jellyfin Client'),
-                    
-                    # -- Objets Complets (Nouveau) --
+                    'device_id': dev_id,
+                    'client': dev_name,
                     'NowPlayingItem': now_playing,
                     'PlayState': play_state,
-                    
-                    # -- Champs à plat (Rétro-compatibilité) --
                     'title': now_playing.get('Name', ''),
                     'status': 'Paused' if play_state.get('IsPaused', False) else 'Playing',
                     'item_id': now_playing.get('Id', ''),
@@ -133,21 +137,39 @@ def main():
                 }
                 payload_data.append(session_data)
 
+            # --- Détection des appareils disparus (STOP) ---
+            for old_dev_id, old_dev_name in known_devices.items():
+                if old_dev_id not in current_cycle_devices:
+                    logging.info(f"Appareil arrêté détecté : {old_dev_name} ({old_dev_id})")
+                    # On force le statut STOP
+                    stop_payload = {
+                        'device_id': old_dev_id,
+                        'client': old_dev_name,
+                        'status': 'Stopped', 
+                        'title': '',
+                        'item_id': '',
+                        'NowPlayingItem': {},
+                        'PlayState': {},
+                        'run_time_ticks': 0,
+                        'position_ticks': 0
+                    }
+                    payload_data.append(stop_payload)
+
+            # Mise à jour de la mémoire
+            known_devices = current_cycle_devices
+
             # Envoi vers Jeedom
             if payload_data:
                 send_to_jeedom(args.callback, args.apikey, payload_data)
 
-            # Gestion du temps (Compensation de dérive)
+            # Gestion du temps (Compensation précise)
             elapsed = time.time() - start_time
             sleep_time = TARGET_CYCLE - elapsed
 
             if sleep_time > 0:
-                # logging.debug(f"Cycle: {elapsed:.3f}s | Sleep: {sleep_time:.3f}s")
                 time.sleep(sleep_time)
-            else:
-                logging.debug(f"Cycle lent: {elapsed:.3f}s (Pas de pause)")
             
-            # FORCE L'AFFICHAGE DES LOGS (Evite le buffering)
+            # Flush pour voir les logs immédiatement si besoin
             sys.stdout.flush()
 
         except Exception as e:
