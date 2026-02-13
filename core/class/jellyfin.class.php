@@ -509,6 +509,15 @@ class jellyfin extends eqLogic {
         if ($this->getDisplay('hideOn' . $version) == 1) {
             return '';
         }
+
+        // --- GESTION DU LISERÉ ---
+        // On vérifie si le liseré est activé (activé par défaut si non défini)
+        if ($this->getConfiguration('widget_border_enable', 1) == 1) {
+            $replace['#widget_border_color#'] = $this->getConfiguration('widget_border_color', '#e5e5e5');
+        } else {
+            // Si désactivé, on met 'transparent' pour garder l'épaisseur du trait sans le voir
+            $replace['#widget_border_color#'] = 'transparent';
+        }
         
         foreach ($this->getCmd('info') as $cmd) {
             $replace['#' . $cmd->getLogicalId() . '#'] = $cmd->execCmd();
@@ -529,4 +538,3 @@ class jellyfinCmd extends cmd {
         $this->getEqLogic()->remoteControl($this->getLogicalId(), $_options);
     }
 }
-?>

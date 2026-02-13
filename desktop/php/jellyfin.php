@@ -48,33 +48,28 @@ $eqLogics = eqLogic::byType($plugin->getId());
     <div class="col-xs-12 eqLogic" style="display: none;">
         <div class="input-group pull-right" style="display:inline-flex">
             <span class="input-group-btn">
-                <a class="btn btn-default eqLogicAction btn-sm" data-action="configure"><i class="fas fa-cogs"></i> {{Configuration avancée}}</a>
-                <a class="btn btn-default eqLogicAction btn-sm" data-action="copy"><i class="fas fa-files-o"></i> {{Dupliquer}}</a>
-                <a class="btn btn-sm btn-success eqLogicAction" data-action="save"><i class="fas fa-check-circle"></i> {{Sauvegarder}}</a>
-                <a class="btn btn-danger btn-sm eqLogicAction" data-action="remove"><i class="fas fa-minus-circle"></i> {{Supprimer}}</a>
+                <a class="btn btn-default btn-sm eqLogicAction" data-action="configure"><i class="fas fa-cogs"></i> {{Configuration avancée}}</a><a class="btn btn-default btn-sm eqLogicAction" data-action="copy"><i class="fas fa-copy"></i> {{Dupliquer}}</a><a class="btn btn-sm btn-success eqLogicAction" data-action="save"><i class="fas fa-check-circle"></i> {{Sauvegarder}}</a><a class="btn btn-danger btn-sm eqLogicAction" data-action="remove"><i class="fas fa-minus-circle"></i> {{Supprimer}}</a>
             </span>
         </div>
-
         <ul class="nav nav-tabs" role="tablist">
             <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
             <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> {{Equipement}}</a></li>
             <li role="presentation"><a href="#commandtab" aria-controls="profile" role="tab" data-toggle="tab"><i class="fas fa-list-alt"></i> {{Commandes}}</a></li>
         </ul>
-
-        <div class="tab-content" style="height:calc(100% - 50px);overflow:auto;overflow-x: hidden;">
+        <div class="tab-content" style="height:calc(100% - 50px);overflow:auto;overflow-x:hidden;">
             <div role="tabpanel" class="tab-pane active" id="eqlogictab">
-                <br />
+                <br/>
                 <form class="form-horizontal">
                     <fieldset>
                         <div class="form-group">
                             <label class="col-sm-3 control-label">{{Nom de l'équipement}}</label>
                             <div class="col-sm-3">
                                 <input type="text" class="eqLogicAttr form-control" data-l1key="id" style="display : none;" />
-                                <input type="text" class="eqLogicAttr form-control" data-l1key="name" placeholder="{{Nom de l'équipement}}" />
+                                <input type="text" class="eqLogicAttr form-control" data-l1key="name" placeholder="{{Nom de l'équipement}}"/>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Objet parent}}</label>
+                            <label class="col-sm-3 control-label" >{{Objet parent}}</label>
                             <div class="col-sm-3">
                                 <select id="sel_object" class="eqLogicAttr form-control" data-l1key="object_id">
                                     <option value="">{{Aucun}}</option>
@@ -103,6 +98,21 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <span class="help-block">{{Identifiant unique du lecteur Jellyfin (ex: 5d1e2f...)}}</span>
                             </div>
                         </div>
+                        
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Afficher le liseré}}</label>
+                            <div class="col-sm-3">
+                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="widget_border_enable" checked />{{Activer}}</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Couleur du liseré}}</label>
+                            <div class="col-sm-3">
+                                <input type="color" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="widget_border_color" />
+                                <span class="help-block">{{Choisissez la couleur qui entourera le widget (Gris clair par défaut)}}</span>
+                            </div>
+                        </div>
                         <!-- FIN DES CHAMPS PERSONNALISÉS -->
 
                     </fieldset>
@@ -126,3 +136,17 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
 <?php include_file('desktop', 'jellyfin', 'js', 'jellyfin'); ?>
 <?php include_file('core', 'plugin.template', 'js'); ?>
+
+<!-- Script pour gérer les défauts si vide -->
+<script>
+    function printEqLogic(_eqLogic) {
+        // Gestion de la couleur par défaut
+        if (_eqLogic.configuration.widget_border_color == undefined || _eqLogic.configuration.widget_border_color == '') {
+            $('.eqLogicAttr[data-l2key=widget_border_color]').val('#e5e5e5');
+        }
+        // Gestion de la case à cocher par défaut (si jamais définie, on l'active)
+        if (_eqLogic.configuration.widget_border_enable == undefined) {
+            $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', true);
+        }
+    }
+</script>
