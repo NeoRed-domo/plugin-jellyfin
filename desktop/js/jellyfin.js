@@ -237,12 +237,19 @@ var JellyfinBrowser = {
         });
     },
 
-    renderItems: function (result) {
+renderItems: function (result) {
         var container = $('#jellyfin-browser-content');
         container.empty();
 
-        if (!result.Items || result.Items.length === 0) {
-            container.html('<div style="width:100%; text-align:center; padding:50px; color: #777; font-size: 1.2em;">Dossier vide</div>');
+        // Modification ici : On gère le cas vide OU le cas d'erreur (result null)
+        if (!result || !result.Items || result.Items.length === 0) {
+            container.html(`
+                <div style="width:100%; text-align:center; padding:50px; color: #777; font-size: 1.2em;">
+                    <i class="fas fa-network-wired" style="font-size: 30px; margin-bottom: 10px; opacity: 0.5;"></i><br>
+                    Dossier vide<br>
+                    <span style="font-size: 0.8em; color: #666;">(Ou serveur Jellyfin hors ligne)</span>
+                </div>
+            `);
             return;
         }
 
