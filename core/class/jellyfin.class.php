@@ -106,19 +106,38 @@ class jellyfin extends eqLogic {
         $activeDevices = array();
 
         foreach ($sessions as $sessionData) {
-            $deviceId = isset($sessionData['device_id']) ? $sessionData['device_id'] : '';
-            $clientName = isset($sessionData['client']) ? $sessionData['client'] : 'Jellyfin Device';
+            $deviceId = '';
+            if (isset($sessionData['device_id'])) $deviceId = $sessionData['device_id'];
+            elseif (isset($sessionData['DeviceId'])) $deviceId = $sessionData['DeviceId'];
+            
+            $clientName = isset($sessionData['client']) ? $sessionData['client'] : (isset($sessionData['Client']) ? $sessionData['Client'] : 'Jellyfin Device');
+            
             if (empty($deviceId)) continue;
 
-            $activeDevices[] = $deviceId; 
+            // 1. On l'ajoute à la liste des "VIVANTS" pour que le nettoyeur ne le tue pas.
+            // (Même s'il n'est pas contrôlable, il est présent)
+            $activeDevices[] = (string)$deviceId;
 
+            // Vérification contrôlable
             $isControllable = false;
             if (isset($sessionData['SupportsRemoteControl']) && $sessionData['SupportsRemoteControl'] === true) $isControllable = true;
             if (isset($sessionData['supports_remote_control']) && $sessionData['supports_remote_control'] === true) $isControllable = true;
-            if (!$isControllable) continue;
 
+            // Récupération de l'équipement (s'il existe)
             $logicalId = (strlen($deviceId) > 120) ? md5($deviceId) : $deviceId;
             $eqLogic = self::byLogicalId($logicalId, 'jellyfin');
+
+            // 2. LOGIQUE DE FILTRAGE INTELLIGENTE
+            if (!$isControllable) {
+                // Si l'équipement n'existe pas encore : ON NE LE CRÉE PAS.
+                // Cela évite de polluer Jeedom avec des équipements inutiles.
+                if (!is_object($eqLogic)) {
+                    continue;
+                }
+                // Si l'équipement existe DÉJÀ (ex: ton POP), on continue pour mettre à jour ses infos (Titre, Image...)
+            }
+
+            // Création si nécessaire (seulement si on est arrivé ici, donc soit contrôlable, soit existant)
             if (!is_object($eqLogic)) {
                 $eqLogic = new jellyfin();
                 $eqLogic->setName($clientName . ' - Jellyfin');
@@ -225,7 +244,9 @@ class jellyfin extends eqLogic {
         $allJellyfins = self::byType('jellyfin');
         foreach ($allJellyfins as $jellyfinEq) {
             if ($jellyfinEq->getIsEnable() == 1) {
-                $confDevId = $jellyfinEq->getConfiguration('device_id');
+                $confDevId = (string)$jellyfinEq->getConfiguration('device_id');
+                
+                // Si l'équipement n'est pas dans la liste des actifs
                 if (!in_array($confDevId, $activeDevices)) {
                     $currentStatus = $jellyfinEq->getCmd(null, 'status')->execCmd();
                     if ($currentStatus != 'Stopped') {
