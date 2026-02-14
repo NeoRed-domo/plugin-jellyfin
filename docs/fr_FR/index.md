@@ -2,48 +2,76 @@
 
 Ce plugin permet de connecter votre serveur **Jellyfin** à Jeedom pour récupérer l'état de lecture, contrôler les médias et afficher un widget interactif (style Spotify).
 
-## 1. Fonctionnalités
 
-*   **Récupération d'état** : Savoir si une lecture est en cours (Play, Pause, Stop).
-*   **Informations Média** : Titre, Artiste, Série, Saison, Épisode, Durée, Position.
-*   **Contrôle** : Lecture, Pause, Stop, Précédent, Suivant.
-*   **Widget Dashboard** : Une interface visuelle riche avec la jaquette, la barre de progression interactive et les temps (écoulé/restant/total).
-*   **Commandes** : Toutes les données sont disponibles sous forme de commandes Jeedom pour vos scénarios.
+## 🌟 Fonctionnalités Principales
 
-## 2. Configuration du Plugin
+### 1. Remontée d'informations en temps réel
+* **Détection automatique** des clients Jellyfin actifs sur le réseau.
+* **État de lecture** : Lecture, Pause, Stop.
+* **Informations Média** : Titre, Série, Saison, Episode, Artiste, Album.
+* **Temps** : Durée totale, position actuelle et temps restant.
+* **Visuel** : Récupération de la **jaquette (Cover)** avec gestion automatique du ratio (Carré pour la musique, Poster pour les films).
 
-Après installation du plugin, vous devez l'activer. Il n'y a pas de configuration générale (daemon) pour le moment, tout se passe au niveau de chaque équipement.
+### 2. Contrôle du lecteur (Télécommande)
+* Play / Pause / Stop.
+* Précédent / Suivant.
+* Contrôle de la position (Seek) via une barre de progression interactive sur le widget.
 
-### Gestion des dépendances
-Le plugin utilise des outils standards. Cliquez sur **Relancer** dans la partie Dépendances si le statut est NOK (bien que le plugin soit autonome en PHP pour sa version actuelle).
+### 3. 🆕 Explorateur de Bibliothèque (Médiathèque)
+Plus besoin de sortir de Jeedom pour choisir quoi regarder !
+* Cliquez sur le logo Jellyfin du widget pour ouvrir l'explorateur.
+* **Navigation fluide** dans vos dossiers, films et musiques.
+* **Fil d'ariane** (Breadcrumb) interactif pour remonter dans l'arborescence.
+* **Détails du média** : Affichage du résumé (synopsis), de l'année, de la note communautaire et de la durée avant le lancement.
+* **Lancement direct** : Lancez la lecture d'un film ou d'une musique sur l'équipement cible d'un simple clic.
 
-## 3. Ajout d'un équipement (Serveur/Client)
+### 4. 🆕 Gestion des Favoris
+Créez des raccourcis vers vos contenus préférés directement sur le widget.
+* **Ajout facile** : Depuis l'explorateur, cliquez sur "Ajouter aux favoris".
+* **Accès rapide** : Un tiroir latéral sur le widget affiche vos favoris avec leurs affiches.
+* **Lancement one-click** : Lancez votre playlist, votre film ou votre chaine TV favorite instantanément.
+* **Suppression** : Gestion simple des favoris obsolètes directement depuis le widget.
 
-1.  Rendez-vous dans le menu **Plugins > Multimédia > Jellyfin**.
-2.  Cliquez sur **Ajouter**.
-3.  Donnez un nom à votre équipement (ex: "Jellyfin Salon").
+### 5. Optimisations Techniques
+* **Démon Python** : Utilisation d'un démon pour une écoute "WebSocket" des événements Jellyfin (réactif et peu gourmand).
+* **Filtrage Intelligent** : Ne crée pas d'équipements pour les clients non contrôlables (pour éviter de polluer Jeedom), mais assure la mise à jour des infos pour les clients existants.
+* **Nettoyage Automatique** : Gestion des sessions fantômes (si un lecteur est éteint brutalement).
 
-### Paramètres de connexion
+---
 
-Dans l'onglet **Equipement**, vous devez renseigner :
+## 🔧 Installation et Configuration
 
-*   **Adresse IP / Host** : L'adresse de votre serveur Jellyfin (ex: `192.168.1.50`).
-*   **Port** : Le port de votre serveur (par défaut `8096`).
-*   **API Key** : Votre clé API Jellyfin.
-*   **Device ID (Session)** : L'identifiant de la session (Client) que vous souhaitez surveiller.
+1.  Installez le plugin depuis le Market Jeedom (ou via GitHub).
+2.  Activez le plugin.
+3.  Installez les **dépendances** (nécessaire pour le démon Python).
+4.  Dans la configuration du plugin :
+    * Renseignez l'**Adresse IP** de votre serveur Jellyfin.
+    * Renseignez le **Port** (par défaut `8096` ou `443` si HTTPS).
+    * Renseignez la **Clé API** (À générer dans Jellyfin : *Tableau de bord > Avancé > Clés d'API*).
+5.  Lancez le Démon.
+6.  Lancez une lecture sur un de vos appareils Jellyfin : l'équipement sera automatiquement créé dans Jeedom.
 
-> **Astuce pour trouver le Device ID :**
-> Lancez une lecture sur votre appareil Jellyfin cible (TV, Navigateur...), puis regardez les logs du plugin ou utilisez l'outil de découverte si disponible (prévu en v1.1).
+---
 
-## 4. Le Widget
+## 📱 Le Widget
 
-Le widget est conçu pour s'intégrer parfaitement au Dashboard.
-*   **Barre de progression** : Vous pouvez cliquer n'importe où sur la barre pour avancer/reculer dans le média.
-*   **Temps** :
-    *   À gauche : Temps écoulé.
-    *   En haut à droite : Temps restant.
-    *   En bas à droite : Durée totale.
-*   **Jaquette** : S'adapte automatiquement (carrée pour la musique, format paysage pour les films).
+Le plugin inclut un widget dédié, conçu pour s'intégrer parfaitement au Dashboard :
+* **Design sombre** (Dark mode) reprenant les codes de Jellyfin.
+* **Fond dynamique** basé sur la jaquette du média en cours (effet flouté).
+* **Tiroir de favoris** rétractable pour gagner de la place.
+
+---
+
+## ⚠️ Remarques
+* Les équipements ne sont créés que s'ils sont détectés comme actifs par le serveur Jellyfin.
+* Certains clients (navigateurs web, certains TV) peuvent ne pas supporter le contrôle à distance (Play/Pause), mais les informations de lecture remonteront quand même.
+
+---
+
+**Auteur :** NeoRed
+**Licence :** AGPL
+
+---
 
 ## 5. FAQ
 

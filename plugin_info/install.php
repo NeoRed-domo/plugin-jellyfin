@@ -3,29 +3,23 @@ require_once __DIR__ . '/../../../core/php/core.inc.php';
 
 /**
  * Fonction exécutée lors de l'installation du plugin
- * Utilisation : Création de tables SQL dédiées (si nécessaire), initialisation de variables
  */
 function jellyfin_install() {
-    // Pour l'instant, le plugin utilise les tables standard de Jeedom (eqLogic, cmd)
-    // Pas d'action spécifique requise à l'installation.
+    // Initialisation des variables de configuration par défaut si nécessaire
+    // Ex: if(is_null(config::byKey('jellyfin_port', 'jellyfin'))) config::save('jellyfin_port', '8096', 'jellyfin');
 }
 
 /**
  * Fonction exécutée lors de la mise à jour du plugin
- * Utilisation : Migration de données, correction de configuration lors d'un changement de version
  */
 function jellyfin_update() {
-    // Exemple de gestion de version pour le futur :
-    // $currentVersion = config::byKey('version', 'jellyfin');
-    // if (version_compare($currentVersion, '1.1', '<')) {
-    //    // Actions de migration vers la 1.1
-    // }
-    
-    // On s'assure que les crons sont bien gérés (même si le plugin n'utilise pas de cron spécifique pour le moment)
-    // Cela permet de nettoyer d'éventuels crons orphelins d'anciennes versions de développement
+    // Nettoyage des caches si nécessaire
+    // On s'assure que les listeners et crons sont propres
     try {
-        log::add('jellyfin', 'info', 'Nettoyage et mise à jour des tâches planifiées...');
-        // Si tu ajoutes un cron plus tard, il faudra peut-être le relancer ici
+        // Suppression des crons fantômes si jamais on change de nom de classe/fonction
+        foreach (cron::byClassAndFunction('jellyfin', 'pull') as $cron) {
+            $cron->remove();
+        }
     } catch (Exception $e) {
         log::add('jellyfin', 'error', 'Erreur lors de la mise à jour : ' . $e->getMessage());
     }
@@ -33,29 +27,26 @@ function jellyfin_update() {
 
 /**
  * Fonction exécutée lors de la suppression du plugin
- * Utilisation : Nettoyage complet (suppression des équipements, des crons, des variables de config)
+ * IMPORTANT : On ne supprime PAS les équipements (eqLogic) pour permettre
+ * une réinstallation sans perte de données (Favoris, Scénarios, IDs).
  */
 function jellyfin_remove() {
-    // Suppression des crons associés au plugin
+    // 1. Suppression des CRONS système associés
     foreach (cron::byClassAndFunction('jellyfin', 'pull') as $cron) {
         $cron->remove();
     }
     
-    // Remise à zéro des listeners (si utilisés)
+    // 2. Suppression des LISTENERS (Evènements Jeedom)
     foreach (listener::byClassAndFunction('jellyfin', 'pull') as $listener) {
         $listener->remove();
     }
     
-    // OPTIONNEL : Suppression des équipements
-    // En général, on laisse le choix à l'utilisateur, mais pour un plugin propre
-    // on peut vouloir supprimer les eqLogics pour ne pas polluer la DB.
-    // Décommente les lignes ci-dessous si tu veux que la suppression du plugin supprime aussi les équipements.
-    
-    
-    $eqLogics = eqLogic::byType('jellyfin');
-    foreach ($eqLogics as $eqLogic) {
-        $eqLogic->remove();
-    }
-    
+    // 3. Nettoyage des fichiers temporaires du Démon (PID, Socket)
+    $tmpFolder = jeedom::getTmpFolder('jellyfin');
+    if(file_exists($tmpFolder . '/jellyfin.pid')) unlink($tmpFolder . '/jellyfin.pid');
+    if(file_exists($tmpFolder . '/jellyfin.sock')) unlink($tmpFolder . '/jellyfin.sock');
+
+    // NOTE : On ne touche pas à la table eqLogic ni cmd.
+    // Si l'utilisateur réinstalle le plugin, il retrouvera tout.
 }
 ?>
