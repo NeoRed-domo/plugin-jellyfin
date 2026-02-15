@@ -47,19 +47,27 @@ $('.eqLogicAction[data-action=gotoPluginConf]').on('click', function () {
 
 // --- EXPLORATEUR DE BIBLIOTHÈQUE ---
 
-var _savedEqLogicId = null;
-var _savedEqLogicName = ""; // Sauvegarde du nom aussi
+// 1. Sauvegarde intelligente de l'état avant rechargement du script
+var _savedState = {
+    id: null,
+    name: "",
+    path: [],
+    item: null
+};
 
 if (typeof JellyfinBrowser !== 'undefined') {
-    _savedEqLogicId = JellyfinBrowser.currentEqLogicId;
-    _savedEqLogicName = JellyfinBrowser.currentEqLogicName;
+    _savedState.id = JellyfinBrowser.currentEqLogicId;
+    _savedState.name = JellyfinBrowser.currentEqLogicName;
+    _savedState.path = JellyfinBrowser.currentPath; // On garde le dossier en cours
+    _savedState.item = JellyfinBrowser.selectedItem; // On garde la sélection !
 }
 
 var JellyfinBrowser = {
-    currentEqLogicId: _savedEqLogicId, 
-    currentEqLogicName: _savedEqLogicName,
-    currentPath: [], 
-    selectedItem: null,
+    // 2. Restauration de l'état
+    currentEqLogicId: _savedState.id, 
+    currentEqLogicName: _savedState.name,
+    currentPath: _savedState.path || [], 
+    selectedItem: _savedState.item,
 
     ticksToTime: function(ticks) {
         if (!ticks) return "";
@@ -75,10 +83,9 @@ var JellyfinBrowser = {
         return res;
     },
 
-    // Modification ici pour accepter le Nom
     open: function (eqLogicId, eqLogicName) {
         JellyfinBrowser.currentEqLogicId = eqLogicId;
-        JellyfinBrowser.currentEqLogicName = eqLogicName || ""; // Gestion cas vide
+        JellyfinBrowser.currentEqLogicName = eqLogicName || ""; 
         JellyfinBrowser.currentPath = [];
         JellyfinBrowser.selectedItem = null;
 
@@ -182,16 +189,9 @@ var JellyfinBrowser = {
         JellyfinBrowser.loadFolder('');
     },
 
-    // Nouvelle fonction pour gérer le retour arrière dans le fil d'ariane
     goBackTo: function(index) {
-        // On récupère la cible avant de couper le tableau
         var target = JellyfinBrowser.currentPath[index];
-        
-        // On coupe le tableau juste AVANT la cible (car loadFolder va la rajouter)
-        // Si on clique sur l'index 0, on veut que le tableau soit vide avant le loadFolder
         JellyfinBrowser.currentPath = JellyfinBrowser.currentPath.slice(0, index);
-        
-        // On recharge le dossier
         JellyfinBrowser.loadFolder(target.id, target.name);
     },
 
@@ -206,17 +206,13 @@ var JellyfinBrowser = {
             JellyfinBrowser.currentPath.push({id: parentId, name: parentName}); 
         }
         
-        // Construction du fil d'ariane cliquable
         var bcHtml = '<span class="cursor hover-text" onclick="JellyfinBrowser.loadFolder(\'\')"><i class="fas fa-home"></i> Accueil</span>';
         
         $.each(JellyfinBrowser.currentPath, function(idx, item){
              bcHtml += ' <span style="color:#888;">&gt;</span> ';
-             
-             // Si c'est le dernier élément (dossier actuel), on ne le rend pas cliquable (ou style différent)
              if (idx === JellyfinBrowser.currentPath.length - 1) {
                  bcHtml += '<span class="label label-default" style="background:#555;">' + item.name + '</span>';
              } else {
-                 // Les éléments précédents sont cliquables via goBackTo
                  bcHtml += '<span class="label label-default cursor hover-text" onclick="JellyfinBrowser.goBackTo(' + idx + ')">' + item.name + '</span>';
              }
         });
@@ -237,11 +233,10 @@ var JellyfinBrowser = {
         });
     },
 
-renderItems: function (result) {
+    renderItems: function (result) {
         var container = $('#jellyfin-browser-content');
         container.empty();
 
-        // Modification ici : On gère le cas vide OU le cas d'erreur (result null)
         if (!result || !result.Items || result.Items.length === 0) {
             container.html(`
                 <div style="width:100%; text-align:center; padding:50px; color: #777; font-size: 1.2em;">

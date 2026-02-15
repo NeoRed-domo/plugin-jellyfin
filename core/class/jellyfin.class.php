@@ -115,7 +115,6 @@ class jellyfin extends eqLogic {
             if (empty($deviceId)) continue;
 
             // 1. On l'ajoute à la liste des "VIVANTS" pour que le nettoyeur ne le tue pas.
-            // (Même s'il n'est pas contrôlable, il est présent)
             $activeDevices[] = (string)$deviceId;
 
             // Vérification contrôlable
@@ -128,16 +127,15 @@ class jellyfin extends eqLogic {
             $eqLogic = self::byLogicalId($logicalId, 'jellyfin');
 
             // 2. LOGIQUE DE FILTRAGE INTELLIGENTE
+            // Si pas contrôlable et n'existe pas -> On ignore (pas de création polluante)
             if (!$isControllable) {
-                // Si l'équipement n'existe pas encore : ON NE LE CRÉE PAS.
-                // Cela évite de polluer Jeedom avec des équipements inutiles.
                 if (!is_object($eqLogic)) {
-                    continue;
+                    continue; 
                 }
-                // Si l'équipement existe DÉJÀ (ex: ton POP), on continue pour mettre à jour ses infos (Titre, Image...)
+                // Si existe déjà -> On continue pour la mise à jour
             }
 
-            // Création si nécessaire (seulement si on est arrivé ici, donc soit contrôlable, soit existant)
+            // Création si nécessaire (et si autorisé par le filtre ci-dessus)
             if (!is_object($eqLogic)) {
                 $eqLogic = new jellyfin();
                 $eqLogic->setName($clientName . ' - Jellyfin');
@@ -499,7 +497,7 @@ class jellyfin extends eqLogic {
         return $url; 
     }
     
-    // --- GESTION DE LA LECTURE CORRIGÉE ---
+    // --- GESTION DE LA LECTURE CORRIGÉE (ANDROID TV FIX - 300ms) ---
     public function playMedia($mediaId, $mode = 'play_now') {
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
         $port = config::byKey('jellyfin_port', 'jellyfin');
@@ -518,6 +516,15 @@ class jellyfin extends eqLogic {
         $sessionId = $sessionData['Id'];
         
         log::add('jellyfin', 'debug', 'PlayMedia demandé. Mode: ' . $mode . ' - MediaId: ' . $mediaId);
+
+        // --- ANDROID TV FIX : Si le lecteur joue déjà un média et qu'on veut "Play Now", on STOP d'abord.
+        if ($mode == 'play_now' && isset($sessionData['NowPlayingItem'])) {
+            log::add('jellyfin', 'debug', 'Lecture en cours détectée. Envoi du STOP forcé (Fix Android TV).');
+            $urlStop = $baseUrl . '/Sessions/' . $sessionId . '/Playing/Stop?api_key=' . $apikey;
+            self::requestApi($urlStop, 'POST');
+            // Pause de 300ms pour Android TV
+            usleep(300000); 
+        }
 
         if ($mode == 'queue_next') {
             $url = $baseUrl . '/Sessions/' . $sessionId . '/Queue?ItemIds=' . $mediaId . '&Mode=PlayNext&api_key=' . $apikey;
@@ -541,7 +548,6 @@ class jellyfin extends eqLogic {
         if (is_object($cmd)) return "Cette commande existe déjà";
 
         $cmd = new jellyfinCmd();
-        // NOM EN ANGLAIS "Play :"
         $cmd->setName("Play : " . $mediaName);
         $cmd->setEqLogic_id($this->getId());
         $cmd->setLogicalId($logicalId);

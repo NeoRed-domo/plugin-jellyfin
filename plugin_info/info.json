@@ -4,13 +4,17 @@
     "description" : "Intégration avancée de Jellyfin. Permet le pilotage complet de vos lecteurs, la remontée d'informations en temps réel (médias, jaquettes, progression) et l'automatisation de vos séances cinéma.",
     "licence" : "AGPL",
     "author" : "NeoRed",
-    "version" : "0.1.0",
+    "version" : "1.0",
     "require" : "4.4",
     "category" : "multimedia",
     "hasDependency" : true,
     "hasOwnDeamon" : true,
     "maxDependancyInstallTime" : 0,
     "isVisible" : true,
-    "changelog" : "",
-    "documentation" : ""
+    "language" : [
+        "fr_FR",
+        "en_US"
+    ],
+    "changelog" : "https://github.com/NeoRed-domo/plugin-jellyfin/blob/main/docs/fr_FR/changelog.md",
+    "documentation" : "https://github.com/NeoRed-domo/plugin-jellyfin/blob/main/docs/fr_FR/index.md"
 }
