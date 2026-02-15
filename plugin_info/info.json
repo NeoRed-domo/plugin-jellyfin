@@ -13,7 +13,9 @@
     "isVisible" : true,
     "language" : [
         "fr_FR",
-        "en_US"
+        "en_US",
+        "es_ES",
+        "de_DE"
     ],
     "changelog" : "https://github.com/NeoRed-domo/plugin-jellyfin/blob/main/docs/fr_FR/changelog.md",
     "documentation" : "https://github.com/NeoRed-domo/plugin-jellyfin/blob/main/docs/fr_FR/index.md"

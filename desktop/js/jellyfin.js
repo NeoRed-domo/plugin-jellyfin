@@ -3,7 +3,6 @@
  * Auteur : NeoRed
  */
 
-// --- GESTION CONFIGURATION (Existant) ---
 $('.eqLogicAction[data-action=add]').on('click', function () {
     $.ajax({
         type: 'POST',
@@ -47,7 +46,6 @@ $('.eqLogicAction[data-action=gotoPluginConf]').on('click', function () {
 
 // --- EXPLORATEUR DE BIBLIOTHÈQUE ---
 
-// 1. Sauvegarde intelligente de l'état avant rechargement du script
 var _savedState = {
     id: null,
     name: "",
@@ -58,12 +56,11 @@ var _savedState = {
 if (typeof JellyfinBrowser !== 'undefined') {
     _savedState.id = JellyfinBrowser.currentEqLogicId;
     _savedState.name = JellyfinBrowser.currentEqLogicName;
-    _savedState.path = JellyfinBrowser.currentPath; // On garde le dossier en cours
-    _savedState.item = JellyfinBrowser.selectedItem; // On garde la sélection !
+    _savedState.path = JellyfinBrowser.currentPath; 
+    _savedState.item = JellyfinBrowser.selectedItem; 
 }
 
 var JellyfinBrowser = {
-    // 2. Restauration de l'état
     currentEqLogicId: _savedState.id, 
     currentEqLogicName: _savedState.name,
     currentPath: _savedState.path || [], 

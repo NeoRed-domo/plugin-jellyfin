@@ -198,7 +198,11 @@
         var updateJellyfinWidget_#id# = function(_options) {
             if (_options.cmd_id == '#position_id#' && Date.now() - lastSeekTime_#id# < 4000) return;
             var cmd = $('.eqLogic[data-eqLogic_id=#id#] .cmd[data-cmd_id="' + _options.cmd_id + '"]');
-            cmd.attr('title','Date de valeur : '+_options.valueDate+'<br/>Collecte : '+_options.collectDate+'<br/>Valeur : '+_options.display_value);
+            
+            // NOTE : Traduction JS manuelle ici pour éviter le bug des accolades
+            var toolTip = 'Date de valeur : ' + _options.valueDate + '<br/>Collecte : ' + _options.collectDate + '<br/>Valeur : ' + _options.display_value;
+            cmd.attr('title', toolTip);
+            
             cmd.html(_options.display_value);
             if(_options.display_value != '') cmd.show(); else cmd.hide();
 
@@ -249,13 +253,13 @@
             $('.eqLogic[data-eqLogic_id=#id#] .toggle-shortcuts-btn').trigger('click');
         });
 
-        // MODIFICATION ICI POUR LE RECOMPTAGE
         $('.eqLogic[data-eqLogic_id=#id#] .delete-shortcut-btn').off('click').on('click', function(e) {
             e.stopPropagation();
             var btn = $(this);
             var cmdId = btn.data('cmd_id');
             var parentCard = btn.closest('.shortcut-item');
 
+            // Traduction manuelle pour éviter le JS cassé
             bootbox.confirm("Voulez-vous supprimer ce favori ?", function(result) {
                 if (result) {
                     $.ajax({
@@ -267,12 +271,9 @@
                         },
                         dataType: 'json',
                         success: function (data) {
-                            if (data.state != 'ok') {
-                                // Error
-                            } else {
+                            if (data.state == 'ok') {
                                 parentCard.fadeOut(300, function(){ 
                                     $(this).remove(); 
-                                    // Vérification s'il reste des éléments
                                     var remainingItems = $('.eqLogic[data-eqLogic_id=#id#] .shortcuts-grid .shortcut-item').length;
                                     if (remainingItems === 0) {
                                         $('.eqLogic[data-eqLogic_id=#id#] .no-shortcuts').fadeIn(200);
@@ -285,7 +286,6 @@
             });
         });
     </script>
-
     <style>
         .shortcuts-scroll-area::-webkit-scrollbar { width: 6px; }
         .shortcuts-scroll-area::-webkit-scrollbar-track { background: #1a1a1a; }

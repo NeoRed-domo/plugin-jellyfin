@@ -34,6 +34,7 @@ class jellyfin extends eqLogic {
         $dep = self::dependancy_info();
         if ($dep['state'] != 'ok') {
             $return['launchable'] = 'nok';
+            // Traduction ajoutée ici
             $return['launchable_message'] = __('Les dépendances ne sont pas installées', __FILE__);
         }
         $pid_file = jeedom::getTmpFolder('jellyfin') . '/jellyfin.pid';
@@ -47,6 +48,7 @@ class jellyfin extends eqLogic {
     public static function deamon_start() {
         self::deamon_stop();
         $deamon_info = self::deamon_info();
+        // Traduction ajoutée ici
         if ($deamon_info['launchable'] != 'ok') throw new Exception(__('Veuillez vérifier la configuration ou les dépendances', __FILE__));
 
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
@@ -61,6 +63,7 @@ class jellyfin extends eqLogic {
         $jellyfin_full_url = (strpos($ip, 'http') === false) ? 'http://' . $ip . ':' . $port : $ip . ':' . $port;
         $path = realpath(__DIR__ . '/../../resources/daemon');
         $script = $path . '/jellyfind.py';
+        // Traduction ajoutée ici
         if (!file_exists($script)) throw new Exception(__('Script Python introuvable', __FILE__));
 
         $jeedomLogLevel = log::getLogLevel('jellyfin_daemon');
@@ -102,7 +105,6 @@ class jellyfin extends eqLogic {
         $apikey = config::byKey('jellyfin_apikey', 'jellyfin');
         $baseUrl = (!empty($ip) && !empty($port)) ? ((strpos($ip, 'http') === false) ? 'http://'.$ip.':'.$port : $ip.':'.$port) : '';
 
-        // Liste pour suivre les appareils actifs
         $activeDevices = array();
 
         foreach ($sessions as $sessionData) {
@@ -114,28 +116,21 @@ class jellyfin extends eqLogic {
             
             if (empty($deviceId)) continue;
 
-            // 1. On l'ajoute à la liste des "VIVANTS" pour que le nettoyeur ne le tue pas.
             $activeDevices[] = (string)$deviceId;
 
-            // Vérification contrôlable
             $isControllable = false;
             if (isset($sessionData['SupportsRemoteControl']) && $sessionData['SupportsRemoteControl'] === true) $isControllable = true;
             if (isset($sessionData['supports_remote_control']) && $sessionData['supports_remote_control'] === true) $isControllable = true;
 
-            // Récupération de l'équipement (s'il existe)
             $logicalId = (strlen($deviceId) > 120) ? md5($deviceId) : $deviceId;
             $eqLogic = self::byLogicalId($logicalId, 'jellyfin');
-
-            // 2. LOGIQUE DE FILTRAGE INTELLIGENTE
-            // Si pas contrôlable et n'existe pas -> On ignore (pas de création polluante)
+            
             if (!$isControllable) {
                 if (!is_object($eqLogic)) {
                     continue; 
                 }
-                // Si existe déjà -> On continue pour la mise à jour
             }
 
-            // Création si nécessaire (et si autorisé par le filtre ci-dessus)
             if (!is_object($eqLogic)) {
                 $eqLogic = new jellyfin();
                 $eqLogic->setName($clientName . ' - Jellyfin');
@@ -225,7 +220,6 @@ class jellyfin extends eqLogic {
                     }
                 }
             }
-            // Update Play/Pause Icon
             $cmdToggle = $eqLogic->getCmd(null, 'play_pause');
             if (is_object($cmdToggle)) {
                 $iconPlay = '<i class="fas fa-play-circle"></i>';
@@ -244,7 +238,6 @@ class jellyfin extends eqLogic {
             if ($jellyfinEq->getIsEnable() == 1) {
                 $confDevId = (string)$jellyfinEq->getConfiguration('device_id');
                 
-                // Si l'équipement n'est pas dans la liste des actifs
                 if (!in_array($confDevId, $activeDevices)) {
                     $currentStatus = $jellyfinEq->getCmd(null, 'status')->execCmd();
                     if ($currentStatus != 'Stopped') {
@@ -274,7 +267,10 @@ class jellyfin extends eqLogic {
     private static function determineMediaType($path) {
         if (empty($path)) return 'Autre'; 
         $path = strtolower($path);
-        // RETOUR EN FRANÇAIS POUR L'AFFICHAGE
+        // Ici, on laisse les labels en français car c'est la valeur stockée.
+        // La traduction se fera côté affichage si besoin, ou on peut traduire ici :
+        // Mais pour la cohérence des scenarios, mieux vaut garder une clé stable ou traduire via __().
+        // Pour l'instant je laisse tel quel pour ne pas casser les scenarios existants des utilisateurs.
         $checkOrder = ['filter_ad' => 'Publicité', 'filter_sound_trailer' => 'Sound Trailer', 'filter_trailer' => 'Bande Annonce', 'filter_movie' => 'Film', 'filter_series' => 'Série', 'filter_audio' => 'Audio'];
         foreach ($checkOrder as $configKey => $typeLabel) {
             $keywords = config::byKey($configKey, 'jellyfin');
@@ -291,12 +287,13 @@ class jellyfin extends eqLogic {
     public function postSave() { $this->createCommands(); }
 
     public function createCommands() {
-        // NOMS DES COMMANDES EN ANGLAIS
+        // NOMS DES COMMANDES (Traduction ajoutée sur les noms)
         $commands = [
             'Prev' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-step-backward"></i>', 'order' => 1],
             'Play' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-play"></i>', 'order' => 2],
             'Pause' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-pause"></i>', 'order' => 3],
-            'Play_Pause' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-play-circle"></i>', 'order' => 4, 'name' => 'Toggle Play/Pause'],
+            // Traduction ici :
+            'Play_Pause' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-play-circle"></i>', 'order' => 4, 'name' => __('Toggle Play/Pause', __FILE__)],
             'Next' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-step-forward"></i>', 'order' => 5],
             'Stop' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-stop"></i>', 'order' => 6],
             'Title' => ['type' => 'info', 'subtype' => 'string', 'order' => 7],
@@ -305,11 +302,12 @@ class jellyfin extends eqLogic {
             'Position' => ['type' => 'info', 'subtype' => 'string', 'order' => 10],
             'Remaining' => ['type' => 'info', 'subtype' => 'string', 'order' => 11],
             'Cover' => ['type' => 'info', 'subtype' => 'string', 'order' => 12],
-            'Duration_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 13, 'name' => 'Duration (Scenario)'],
-            'Position_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 14, 'name' => 'Position (Scenario)'],
-            'Remaining_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 15, 'name' => 'Remaining (Scenario)'],
-            'Media_Type' => ['type' => 'info', 'subtype' => 'string', 'order' => 16, 'name' => 'Media Type'],
-            'Set_Position' => ['type' => 'action', 'subtype' => 'slider', 'order' => 99, 'name' => 'Set Position', 'isVisible' => 0],
+            // Traductions ici :
+            'Duration_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 13, 'name' => __('Duration (Scenario)', __FILE__)],
+            'Position_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 14, 'name' => __('Position (Scenario)', __FILE__)],
+            'Remaining_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 15, 'name' => __('Remaining (Scenario)', __FILE__)],
+            'Media_Type' => ['type' => 'info', 'subtype' => 'string', 'order' => 16, 'name' => __('Media Type', __FILE__)],
+            'Set_Position' => ['type' => 'action', 'subtype' => 'slider', 'order' => 99, 'name' => __('Set Position', __FILE__), 'isVisible' => 0],
         ];
         foreach ($commands as $name => $options) {
             $logicalId = strtolower($name);
@@ -427,20 +425,20 @@ class jellyfin extends eqLogic {
         }
         
         foreach ($this->getCmd('action') as $cmd) {
-            // Si c'est un raccourci média
             if ($cmd->getConfiguration('is_media_shortcut') == 1) {
                 $mediaId = $cmd->getConfiguration('media_id');
                 $imgTag = $cmd->getConfiguration('image_tag');
                 $name = str_replace('Lancer : ', '', $cmd->getName());
-                // Compatibilité Play :
                 $name = str_replace('Play : ', '', $name);
                 
                 $imgUrl = self::getItemImageUrl($mediaId, $imgTag);
                 
-                // HTML simplifié : Image directe dans .shortcut-item
+                // Traduction du "Supprimer" au survol
+                $deleteTitle = __('Supprimer', __FILE__);
+                
                 $shortcutsHtml .= '<div class="shortcut-item cursor" onclick="jeedom.cmd.execute({id: \'' . $cmd->getId() . '\'});" title="' . $name . '">';
-                $shortcutsHtml .= '  <i class="fas fa-times-circle delete-shortcut-btn" data-cmd_id="' . $cmd->getId() . '" title="Supprimer"></i>';
-                $shortcutsHtml .= '  <img src="' . $imgUrl . '">'; // Plus de div wrapper inutile
+                $shortcutsHtml .= '  <i class="fas fa-times-circle delete-shortcut-btn" data-cmd_id="' . $cmd->getId() . '" title="' . $deleteTitle . '"></i>';
+                $shortcutsHtml .= '  <img src="' . $imgUrl . '">'; 
                 $shortcutsHtml .= '</div>';
             } else {
                 $replace['#' . $cmd->getLogicalId() . '_id#'] = $cmd->getId();
@@ -497,32 +495,30 @@ class jellyfin extends eqLogic {
         return $url; 
     }
     
-    // --- GESTION DE LA LECTURE CORRIGÉE (ANDROID TV FIX - 300ms) ---
+    // --- GESTION DE LA LECTURE ---
     public function playMedia($mediaId, $mode = 'play_now') {
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
         $port = config::byKey('jellyfin_port', 'jellyfin');
         $apikey = config::byKey('jellyfin_apikey', 'jellyfin');
         $deviceId = $this->getConfiguration('device_id');
         
-        if (empty($ip) || empty($deviceId)) return ['error' => 'Configuration invalide'];
+        if (empty($ip) || empty($deviceId)) return ['error' => __('Configuration invalide', __FILE__)];
 
         $baseUrl = (strpos($ip, 'http') === false) ? 'http://'.$ip.':'.$port : $ip.':'.$port;
         $sessionData = self::getSessionDataFromDeviceId($baseUrl, $apikey, $deviceId);
 
         if (!$sessionData || !isset($sessionData['Id'])) {
-            return ['error' => 'Session inactive (lecteur éteint ?)'];
+            return ['error' => __('Session inactive (lecteur éteint ?)', __FILE__)];
         }
         
         $sessionId = $sessionData['Id'];
         
         log::add('jellyfin', 'debug', 'PlayMedia demandé. Mode: ' . $mode . ' - MediaId: ' . $mediaId);
 
-        // --- ANDROID TV FIX : Si le lecteur joue déjà un média et qu'on veut "Play Now", on STOP d'abord.
         if ($mode == 'play_now' && isset($sessionData['NowPlayingItem'])) {
             log::add('jellyfin', 'debug', 'Lecture en cours détectée. Envoi du STOP forcé (Fix Android TV).');
             $urlStop = $baseUrl . '/Sessions/' . $sessionId . '/Playing/Stop?api_key=' . $apikey;
             self::requestApi($urlStop, 'POST');
-            // Pause de 300ms pour Android TV
             usleep(300000); 
         }
 
@@ -545,7 +541,8 @@ class jellyfin extends eqLogic {
         $logicalId = 'media_' . $mediaId; 
 
         $cmd = $this->getCmd(null, $logicalId);
-        if (is_object($cmd)) return "Cette commande existe déjà";
+        // Traduction ici
+        if (is_object($cmd)) return __('Cette commande existe déjà', __FILE__);
 
         $cmd = new jellyfinCmd();
         $cmd->setName("Play : " . $mediaName);
@@ -558,7 +555,8 @@ class jellyfin extends eqLogic {
         $cmd->setConfiguration('is_media_shortcut', 1); 
         if($imgTag) $cmd->setConfiguration('image_tag', $imgTag);
         $cmd->save();
-        return "Commande créée avec succès";
+        // Traduction ici
+        return __('Commande créée avec succès', __FILE__);
     }
 }
 

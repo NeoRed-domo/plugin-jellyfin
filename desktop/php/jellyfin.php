@@ -7,29 +7,26 @@ sendVarToJS('eqType', $plugin->getId());
 $eqLogics = eqLogic::byType($plugin->getId());
 ?>
 <div class="row row-overflow">
-    <!-- Colonne de gauche : Liste des équipements -->
     <div class="col-xs-12 eqLogicThumbnailDisplay">
-        <legend><i class="fas fa-cog"></i>  {{Gestion}}</legend>
+        <legend><i class="fas fa-cog"></i>  <?php echo __('Gestion', __FILE__); ?></legend>
         <div class="eqLogicThumbnailContainer">
             <div class="cursor eqLogicAction logoPrimary" data-action="add">
                 <i class="fas fa-plus-circle"></i>
                 <br>
-                <span>{{Ajouter}}</span>
+                <span><?php echo __('Ajouter', __FILE__); ?></span>
             </div>
-            <!-- Bouton Configuration Globale -->
             <div class="cursor eqLogicAction logoSecondary" data-action="gotoPluginConf">
                 <i class="fas fa-wrench"></i>
                 <br>
-                <span>{{Configuration}}</span>
+                <span><?php echo __('Configuration', __FILE__); ?></span>
             </div>
-             <!-- Bouton Scan (Nouveau) -->
              <div class="cursor eqLogicAction logoSecondary" data-action="scanClients">
                 <i class="fas fa-search"></i>
                 <br>
-                <span>{{Forcer Scan}}</span>
+                <span><?php echo __('Forcer Scan', __FILE__); ?></span>
             </div>
         </div>
-        <legend><i class="fas fa-tv"></i>  {{Mes Lecteurs Jellyfin}}</legend>
+        <legend><i class="fas fa-tv"></i>  <?php echo __('Mes Lecteurs Jellyfin', __FILE__); ?></legend>
         <div class="eqLogicThumbnailContainer">
             <?php
             foreach ($eqLogics as $eqLogic) {
@@ -44,17 +41,16 @@ $eqLogics = eqLogic::byType($plugin->getId());
         </div>
     </div>
 
-    <!-- Colonne de droite : Configuration de l'équipement -->
     <div class="col-xs-12 eqLogic" style="display: none;">
         <div class="input-group pull-right" style="display:inline-flex">
             <span class="input-group-btn">
-                <a class="btn btn-default btn-sm eqLogicAction" data-action="configure"><i class="fas fa-cogs"></i> {{Configuration avancée}}</a><a class="btn btn-default btn-sm eqLogicAction" data-action="copy"><i class="fas fa-copy"></i> {{Dupliquer}}</a><a class="btn btn-sm btn-success eqLogicAction" data-action="save"><i class="fas fa-check-circle"></i> {{Sauvegarder}}</a><a class="btn btn-danger btn-sm eqLogicAction" data-action="remove"><i class="fas fa-minus-circle"></i> {{Supprimer}}</a>
+                <a class="btn btn-default btn-sm eqLogicAction" data-action="configure"><i class="fas fa-cogs"></i> <?php echo __('Configuration avancée', __FILE__); ?></a><a class="btn btn-default btn-sm eqLogicAction" data-action="copy"><i class="fas fa-copy"></i> <?php echo __('Dupliquer', __FILE__); ?></a><a class="btn btn-sm btn-success eqLogicAction" data-action="save"><i class="fas fa-check-circle"></i> <?php echo __('Sauvegarder', __FILE__); ?></a><a class="btn btn-danger btn-sm eqLogicAction" data-action="remove"><i class="fas fa-minus-circle"></i> <?php echo __('Supprimer', __FILE__); ?></a>
             </span>
         </div>
         <ul class="nav nav-tabs" role="tablist">
             <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
-            <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> {{Equipement}}</a></li>
-            <li role="presentation"><a href="#commandtab" aria-controls="profile" role="tab" data-toggle="tab"><i class="fas fa-list-alt"></i> {{Commandes}}</a></li>
+            <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> <?php echo __('Equipement', __FILE__); ?></a></li>
+            <li role="presentation"><a href="#commandtab" aria-controls="profile" role="tab" data-toggle="tab"><i class="fas fa-list-alt"></i> <?php echo __('Commandes', __FILE__); ?></a></li>
         </ul>
         <div class="tab-content" style="height:calc(100% - 50px);overflow:auto;overflow-x:hidden;">
             <div role="tabpanel" class="tab-pane active" id="eqlogictab">
@@ -62,17 +58,17 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <form class="form-horizontal">
                     <fieldset>
                         <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Nom de l'équipement}}</label>
+                            <label class="col-sm-3 control-label"><?php echo __('Nom de l\'équipement', __FILE__); ?></label>
                             <div class="col-sm-3">
                                 <input type="text" class="eqLogicAttr form-control" data-l1key="id" style="display : none;" />
-                                <input type="text" class="eqLogicAttr form-control" data-l1key="name" placeholder="{{Nom de l'équipement}}"/>
+                                <input type="text" class="eqLogicAttr form-control" data-l1key="name" placeholder="<?php echo __('Nom de l\'équipement', __FILE__); ?>"/>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label class="col-sm-3 control-label" >{{Objet parent}}</label>
+                            <label class="col-sm-3 control-label" ><?php echo __('Objet parent', __FILE__); ?></label>
                             <div class="col-sm-3">
                                 <select id="sel_object" class="eqLogicAttr form-control" data-l1key="object_id">
-                                    <option value="">{{Aucun}}</option>
+                                    <option value=""><?php echo __('Aucun', __FILE__); ?></option>
                                     <?php
                                     foreach (jeeObject::all() as $object) {
                                         echo '<option value="' . $object->getId() . '">' . $object->getName() . '</option>';
@@ -82,38 +78,36 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
                         <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Activer}}</label>
+                            <label class="col-sm-3 control-label"><?php echo __('Activer', __FILE__); ?></label>
                             <div class="col-sm-9">
-                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked />{{Activer}}</label>
-                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isVisible" checked />{{Visible}}</label>
+                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked /><?php echo __('Activer', __FILE__); ?></label>
+                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isVisible" checked /><?php echo __('Visible', __FILE__); ?></label>
                             </div>
                         </div>
 
-                        <!-- NOS CHAMPS PERSONNALISÉS -->
                         <hr>
                         <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Device ID (Client)}}</label>
+                            <label class="col-sm-3 control-label"><?php echo __('Device ID (Client)', __FILE__); ?></label>
                             <div class="col-sm-3">
-                                <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_id" placeholder="L'ID du lecteur à surveiller" />
-                                <span class="help-block">{{Identifiant unique du lecteur Jellyfin (ex: 5d1e2f...)}}</span>
+                                <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_id" placeholder="<?php echo __('L\'ID du lecteur à surveiller', __FILE__); ?>" />
+                                <span class="help-block"><?php echo __('Identifiant unique du lecteur Jellyfin (ex: 5d1e2f...)', __FILE__); ?></span>
                             </div>
                         </div>
                         
                         <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Afficher le liseré}}</label>
+                            <label class="col-sm-3 control-label"><?php echo __('Afficher le liseré', __FILE__); ?></label>
                             <div class="col-sm-3">
-                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="widget_border_enable" />{{Activer}}</label>
+                                <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="widget_border_enable" /><?php echo __('Activer', __FILE__); ?></label>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Couleur du liseré}}</label>
+                            <label class="col-sm-3 control-label"><?php echo __('Couleur du liseré', __FILE__); ?></label>
                             <div class="col-sm-3">
                                 <input type="color" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="widget_border_color" />
-                                <span class="help-block">{{Choisissez la couleur qui entourera le widget (Gris clair par défaut)}}</span>
+                                <span class="help-block"><?php echo __('Choisissez la couleur qui entourera le widget (Gris clair par défaut)', __FILE__); ?></span>
                             </div>
                         </div>
-                        <!-- FIN DES CHAMPS PERSONNALISÉS -->
 
                     </fieldset>
                 </form>
@@ -123,7 +117,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <table id="table_cmd" class="table table-bordered table-condensed">
                     <thead>
                         <tr>
-                            <th>{{Nom}}</th><th>{{Type}}</th><th>{{Action}}</th>
+                            <th><?php echo __('Nom', __FILE__); ?></th><th><?php echo __('Type', __FILE__); ?></th><th><?php echo __('Action', __FILE__); ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -137,14 +131,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
 <?php include_file('desktop', 'jellyfin', 'js', 'jellyfin'); ?>
 <?php include_file('core', 'plugin.template', 'js'); ?>
 
-<!-- Script pour gérer les défauts si vide -->
 <script>
     function printEqLogic(_eqLogic) {
-        // Gestion de la couleur par défaut
         if (_eqLogic.configuration.widget_border_color == undefined || _eqLogic.configuration.widget_border_color == '') {
             $('.eqLogicAttr[data-l2key=widget_border_color]').val('#e5e5e5');
         }
-        // Gestion de la case à cocher par défaut (MODIFICATION : décoché par défaut)
         if (_eqLogic.configuration.widget_border_enable == undefined) {
             $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', false);
         }
