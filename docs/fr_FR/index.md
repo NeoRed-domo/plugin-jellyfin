@@ -1,8 +1,7 @@
 # Plugin Jellyfin pour Jeedom
 
-Ce plugin permet de connecter votre serveur **Jellyfin** à Jeedom pour récupérer l'état de lecture de vos différents lecteurs (Clients), les contrôler et naviguer dans votre bibliothèque multimédia.
+Ce plugin permet de connecter votre serveur **Jellyfin** à Jeedom pour récupérer l'état de lecture, contrôler les médias et afficher un widget interactif (style Spotify).
 
-**Langues supportées :** 🇫🇷 Français | 🇺🇸 English | 🇩🇪 Deutsch | 🇪🇸 Español
 
 ## 🌟 Fonctionnalités Principales
 
@@ -17,39 +16,39 @@ Ce plugin permet de connecter votre serveur **Jellyfin** à Jeedom pour récupé
 * Play / Pause / Stop.
 * Précédent / Suivant.
 * Contrôle de la position (Seek) via une barre de progression interactive sur le widget.
-* *Note : Optimisé pour Android TV (Freebox POP, Shield...) avec gestion des délais de latence.*
 
-### 3. Explorateur de Bibliothèque (Médiathèque)
+### 3. 🆕 Explorateur de Bibliothèque (Médiathèque)
 Plus besoin de sortir de Jeedom pour choisir quoi regarder !
 * Cliquez sur le logo Jellyfin du widget pour ouvrir l'explorateur.
 * **Navigation fluide** dans vos dossiers, films et musiques.
 * **Fil d'ariane** (Breadcrumb) interactif pour remonter dans l'arborescence.
-* **Détails du média** : Affichage du résumé (synopsis), de l'année, de la note communautaire et de la durée.
-* **Lancement direct** : Lancez la lecture sur l'équipement cible d'un simple clic.
+* **Détails du média** : Affichage du résumé (synopsis), de l'année, de la note communautaire et de la durée avant le lancement.
+* **Lancement direct** : Lancez la lecture d'un film ou d'une musique sur l'équipement cible d'un simple clic.
 
-### 4. Gestion des Favoris
+### 4. 🆕 Gestion des Favoris
 Créez des raccourcis vers vos contenus préférés directement sur le widget.
 * **Ajout facile** : Depuis l'explorateur, cliquez sur "Ajouter aux favoris".
 * **Accès rapide** : Un tiroir latéral sur le widget affiche vos favoris avec leurs affiches.
-* **Lancement one-click** : Lancez votre playlist ou votre film favori instantanément.
+* **Lancement one-click** : Lancez votre playlist, votre film ou votre chaine TV favorite instantanément.
+* **Suppression** : Gestion simple des favoris obsolètes directement depuis le widget.
 
 ### 5. Optimisations Techniques
-* **Démon Python** : Connexion WebSocket réactive et peu gourmande.
-* **Filtrage Intelligent** : Gestion propre des équipements pour éviter la pollution de Jeedom.
-* **Internationalisation** : Interface entièrement traduite (FR, EN, DE, ES).
+* **Démon Python** : Utilisation d'un démon pour une écoute "WebSocket" des événements Jellyfin (réactif et peu gourmand).
+* **Filtrage Intelligent** : Ne crée pas d'équipements pour les clients non contrôlables (pour éviter de polluer Jeedom), mais assure la mise à jour des infos pour les clients existants.
+* **Nettoyage Automatique** : Gestion des sessions fantômes (si un lecteur est éteint brutalement).
 
 ---
 
 ## 🔧 Installation et Configuration
 
-1.  Installez le plugin depuis le Market Jeedom.
+1.  Installez le plugin depuis le Market Jeedom (ou via GitHub).
 2.  Activez le plugin.
 3.  Installez les **dépendances** (nécessaire pour le démon Python).
 4.  Dans la configuration du plugin :
     * Renseignez l'**Adresse IP** de votre serveur Jellyfin.
     * Renseignez le **Port** (par défaut `8096` ou `443` si HTTPS).
     * Renseignez la **Clé API** (À générer dans Jellyfin : *Tableau de bord > Avancé > Clés d'API*).
-5.  Lancez le Démon (Vérifiez qu'il est au statut OK).
+5.  Lancez le Démon.
 6.  Lancez une lecture sur un de vos appareils Jellyfin : l'équipement sera automatiquement créé dans Jeedom.
 
 ---
@@ -59,17 +58,30 @@ Créez des raccourcis vers vos contenus préférés directement sur le widget.
 Le plugin inclut un widget dédié, conçu pour s'intégrer parfaitement au Dashboard :
 * **Design sombre** (Dark mode) reprenant les codes de Jellyfin.
 * **Fond dynamique** basé sur la jaquette du média en cours (effet flouté).
-* **Tiroir de favoris** rétractable pour gagner de la place (cliquez sur le cœur).
-* **Bouton Bibliothèque** (Logo Jellyfin) pour parcourir vos médias.
+* **Tiroir de favoris** rétractable pour gagner de la place.
 
 ---
 
-## ⚠️ FAQ & Remarques
-* **Pourquoi mon équipement n'apparaît pas ?** : Lancez une lecture sur l'appareil. Le plugin ne crée les équipements que lorsqu'ils sont actifs pour la première fois.
-* **Contrôle impossible ?** : Certains clients (navigateurs web, certaines TV DLNA) ne supportent pas le contrôle à distance. Le plugin remontera les infos mais les boutons Play/Pause seront inactifs.
-* **Bibliothèque vide ?** : Vérifiez que votre serveur Jellyfin est bien allumé et accessible depuis Jeedom.
+## ⚠️ Remarques
+* Les équipements ne sont créés que s'ils sont détectés comme actifs par le serveur Jellyfin.
+* Certains clients (navigateurs web, certains TV) peuvent ne pas supporter le contrôle à distance (Play/Pause), mais les informations de lecture remonteront quand même.
 
 ---
 
 **Auteur :** NeoRed
 **Licence :** AGPL
+
+---
+
+## 5. FAQ
+
+**La jaquette ne s'affiche pas ?**
+Vérifiez que votre serveur Jellyfin est bien accessible depuis Jeedom et que l'API Key a les droits suffisants.
+
+**Le temps restant ne bouge pas ?**
+Le widget calcule le temps localement pour fluidifier l'affichage, mais il se synchronise avec Jeedom à chaque rafraîchissement (polling).
+
+***
+
+**Changelog**
+*   **v1.0** : Version initiale. Support complet lecture/pause/stop et widget interactif.
