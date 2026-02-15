@@ -1,6 +1,6 @@
 # Plugin Jellyfin pour Jeedom
 
-![Jeedom Version](https://img.shields.io/badge/Jeedom-4.4%2B-success) ![Version](https://img.shields.io/badge/Version-Beta-orange) ![License](https://img.shields.io/badge/License-AGPL-blue)
+![Jeedom Version](https://img.shields.io/badge/Jeedom-4.4%2B-success) ![Version](https://img.shields.io/badge/Version-Stable-brightgreen) ![Languages](https://img.shields.io/badge/Langues-FR_|_EN_|_DE_|_ES-blueviolet) ![License](https://img.shields.io/badge/License-AGPL-blue)
 
 **Intégrez votre serveur multimédia Jellyfin au cœur de votre domotique.**
 
@@ -37,8 +37,14 @@ Créez des raccourcis vers vos contenus préférés directement sur le widget.
 * **Lancement one-click** : Lancez votre playlist, votre film ou votre chaine TV favorite instantanément.
 * **Suppression** : Gestion simple des favoris obsolètes directement depuis le widget.
 
-### 5. Optimisations Techniques
+### 5. 🌍 Internationalisation
+Le plugin est désormais accessible au plus grand nombre !
+* **Interface entièrement traduite** : Français 🇫🇷, Anglais 🇺🇸, Allemand 🇩🇪 et Espagnol 🇪🇸.
+* Les fichiers de langues sont conformes aux standards Jeedom Core v4.4+.
+
+### 6. Optimisations Techniques & Fiabilité
 * **Démon Python** : Utilisation d'un démon pour une écoute "WebSocket" des événements Jellyfin (réactif et peu gourmand).
+* **Fix Android TV / Freebox POP** : Gestion intelligente des délais (300ms) pour garantir que le changement de film fonctionne parfaitement, même sur les box TV qui ferment l'activité vidéo entre deux lectures.
 * **Filtrage Intelligent** : Ne crée pas d'équipements pour les clients non contrôlables (pour éviter de polluer Jeedom), mais assure la mise à jour des infos pour les clients existants.
 * **Nettoyage Automatique** : Gestion des sessions fantômes (si un lecteur est éteint brutalement).
 
@@ -64,20 +70,21 @@ Le plugin inclut un widget dédié, conçu pour s'intégrer parfaitement au Dash
 * **Design sombre** (Dark mode) reprenant les codes de Jellyfin.
 * **Fond dynamique** basé sur la jaquette du média en cours (effet flouté).
 * **Tiroir de favoris** rétractable pour gagner de la place.
+* **Bouton Bibliothèque** pour un accès direct au contenu.
 
 ---
 
 ## ⚠️ Remarques
 * Les équipements ne sont créés que s'ils sont détectés comme actifs par le serveur Jellyfin.
-* Certains clients (navigateurs web, certains TV) peuvent ne pas supporter le contrôle à distance (Play/Pause), mais les informations de lecture remonteront quand même.
+* Certains clients (navigateurs web, certaines TV) peuvent ne pas supporter le contrôle à distance (Play/Pause), mais les informations de lecture remonteront quand même.
 
 ---
 
 **Auteur :** NeoRed
 **Licence :** AGPL
 
-*   **Un bug ?** Merci d'ouvrir une [Issue](https://github.com/NeoRed-domo/plugin-jellyfin/issues) en décrivant précisément le problème et en fournissant les logs en mode `Debug`.
-*   **Une idée ?** N'hésitez pas à proposer des améliorations via des Pull Requests.
+* **Un bug ?** Merci d'ouvrir une [Issue](https://github.com/NeoRed-domo/plugin-jellyfin/issues) en décrivant précisément le problème et en fournissant les logs en mode `Debug`.
+* **Une idée ?** N'hésitez pas à proposer des améliorations via des Pull Requests.
 
 ---
 

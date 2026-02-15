@@ -1,6 +1,17 @@
-# Changelog Bêta
+# Changelog
 
-Ce fichier recense toutes les modifications notables apportées au plugin Jellyfin en version Bêta.
+Ce fichier recense toutes les modifications notables apportées au plugin Jellyfin.
+
+## [1.0.0] - 15-02-2026 (Release Candidate)
+
+🌍 **Internationalisation & Correctifs**
+
+* **Multi-langues** : Le plugin est désormais entièrement traduit en **Anglais** (en_US), **Allemand** (de_DE) et **Espagnol** (es_ES).
+* **Correctif** : Réparation du bouton d'ouverture de la bibliothèque sur le widget.
+* **Correctif** : Mise à jour de la syntaxe PHP dans la page de configuration pour une compatibilité parfaite avec le système de traduction Jeedom.
+* **Documentation** : Mise à jour des liens et de la structure pour le Market.
+
+---
 
 ## [Beta] - 14-02-2026
 
@@ -17,22 +28,20 @@ Ce fichier recense toutes les modifications notables apportées au plugin Jellyf
 * **Fil d'Ariane Interactif** : Navigation cliquable dans l'explorateur pour revenir facilement aux dossiers précédents.
 * **Ergonomie** : Ajout du nom de l'équipement dans les fenêtres contextuelles et confirmations visuelles.
 * **Barre de progression** : Amélioration de la fluidité et de la précision du contrôle (Seek).
+* **Correctif Android TV** : Ajout d'une sécurité (pause 300ms) pour garantir le changement de média sur les box Android/Freebox POP.
 
 ### 🔧 Améliorations Techniques
-* **Filtrage Intelligent** : Les nouveaux clients non-contrôlables ne créent plus d'équipements polluants, mais ceux existants continuent d'être mis à jour.
-* **Nettoyage de Session** : Forçage du statut "Stopped" si un client disparaît brutalement du réseau (ex: fermeture navigateur).
-* **Standardisation** : Passage des ID de commandes internes en Anglais (pour la stabilité) et labels d'affichage en Français.
+* **Filtrage Intelligent** : Les nouveaux clients non-contrôlables ne créent plus d'équipements polluants.
+* **Nettoyage de Session** : Forçage du statut "Stopped" si un client disparaît brutalement du réseau.
 
 ---
 
 ## [Beta] - 12-02-2026
 
-🎉 **Lancement initial du plugin sur le Market Jeedom !**
+🎉 **Lancement initial du plugin !**
 
-### 🚀 Fonctionnalités
-* **Connexion WebSocket** : Écoute des événements du serveur en temps réel (plus réactif qu'un cron).
-* **Découverte Auto** : Création automatique des équipements Jeedom dès qu'une lecture est détectée sur le serveur.
-* **Contrôle Média** : Commandes Play, Pause, Stop, Précédent, Suivant et Seek (changement de position).
-* **Métadonnées** : Récupération complète (Titre, Album, Artiste, Série, Saison, Épisode) et gestion des images.
-* **Widget** : Interface graphique dédiée (Dashboard & Mobile) avec barre de progression interactive.
-* **Système** : Gestion du démon en Python pour la connexion permanente.
+* **Connexion WebSocket** : Écoute des événements en temps réel.
+* **Découverte Auto** : Création automatique des équipements.
+* **Contrôle Média** : Play, Pause, Stop, Seek, etc.
+* **Métadonnées & Images** : Récupération complète.
+* **Widget** : Interface graphique dédiée.
