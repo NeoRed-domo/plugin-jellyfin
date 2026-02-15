@@ -41,10 +41,16 @@ try {
     }
 
     /* Action: Explorateur de Bibliothèque */
+
     if (init('action') == 'getLibrary') {
-        $parentId = init('parentId'); 
-        $result = jellyfin::getLibraryItems($parentId);
+        $parentId = init('parentId');
+        // AJOUT ICI : On récupère le terme de recherche
+        $searchTerm = init('search'); 
         
+        // MODIFICATION ICI : On passe les deux paramètres à la fonction
+        $result = jellyfin::getLibraryItems($parentId, $searchTerm);
+        
+        // ON GARDE LE TRAITEMENT EXISTANT (Important pour les images !)
         if (is_array($result) && isset($result['Items'])) {
             foreach ($result['Items'] as &$item) {
                 $imgTag = isset($item['ImageTags']['Primary']) ? $item['ImageTags']['Primary'] : null;
@@ -83,13 +89,21 @@ try {
         ajax::success($result);
     }
 
-    /* NOUVEAU : Supprimer un favori */
+/* Action: Supprimer un favori (Sécurisé) */
     if (init('action') == 'remove_command') {
         $cmdId = init('cmdId');
         $cmd = cmd::byId($cmdId);
+        
         if (is_object($cmd)) {
-            $cmd->remove();
-            ajax::success();
+            // Vérification de sécurité : l'équipement parent doit être de type 'jellyfin'
+            $eqLogic = $cmd->getEqLogic();
+            if (is_object($eqLogic) && $eqLogic->getEqType_name() == 'jellyfin') {
+                $cmd->remove();
+                ajax::success();
+            } else {
+                // Ce n'est pas une commande Jellyfin !
+                throw new Exception(__('Action non autorisée', __FILE__));
+            }
         } else {
             throw new Exception(__('Commande introuvable', __FILE__));
         }

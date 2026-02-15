@@ -62,14 +62,17 @@
         "Favori ajouté !": "¡Favorito añadido!",
         "Annuler": "Cancelar",
         "Lire maintenant": "Reproducir ahora",
-        "Veuillez sélectionner un média.": "Por favor seleccione un medio."
+        "Veuillez sélectionner un média.": "Por favor seleccione un medio.",
+        "Rechercher...": "Buscar...",
+        "Recherche...": "Buscando...",
+        "Aucun résultat": "Ningún resultado"
     },
     "plugins/jellyfin/core/template/dashboard/jellyfin.html": {
         "Favoris pour": "Favoritos para",
         "Mes Favoris": "Mis Favoritos",
         "Fermer": "Cerrar",
         "Aucun favori.": "Ningún favorito.",
-        "Cliquez sur le + pour en ajouter.": "Haga clic en + para añadir.",
+        "Cliquez sur le + pour en añadir.": "Haga clic en + para añadir.",
         "Date de valeur : ": "Fecha de valor: ",
         "Collecte : ": "Recogida: ",
         "Valeur : ": "Valor: ",

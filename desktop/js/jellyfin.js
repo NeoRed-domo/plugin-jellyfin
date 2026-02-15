@@ -3,6 +3,14 @@
  * Auteur : NeoRed
  */
 
+// Fonction de traduction sécurisée
+function _t(str) {
+    if (typeof jeedom !== 'undefined' && jeedom.ui && jeedom.ui.translate) {
+        return jeedom.ui.translate(str);
+    }
+    return str; // Fallback au français si le traducteur est absent
+}
+
 $('.eqLogicAction[data-action=add]').on('click', function () {
     $.ajax({
         type: 'POST',
@@ -15,14 +23,14 @@ $('.eqLogicAction[data-action=add]').on('click', function () {
                 $('#div_alert').showAlert({message: data.result, level: 'danger'});
                 return;
             }
-            $('#div_alert').showAlert({message: 'Equipement ajouté avec succès', level: 'success'});
+            $('#div_alert').showAlert({message: _t('Equipement ajouté avec succès'), level: 'success'});
             window.location.reload();
         }
     });
 });
 
 $('.eqLogicAction[data-action=scanClients]').on('click', function () {
-    $('#div_alert').showAlert({message: 'Scan en cours...', level: 'warning'});
+    $('#div_alert').showAlert({message: _t('Scan en cours...'), level: 'warning'});
     $.ajax({
         type: 'POST',
         url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
@@ -34,7 +42,7 @@ $('.eqLogicAction[data-action=scanClients]').on('click', function () {
                 $('#div_alert').showAlert({message: data.result, level: 'danger'});
                 return;
             }
-            $('#div_alert').showAlert({message: 'Scan terminé ! Clients trouvés : ' + data.result, level: 'success'});
+            $('#div_alert').showAlert({message: _t('Scan terminé ! Clients trouvés : ') + data.result, level: 'success'});
             setTimeout(function () { window.location.reload(); }, 1000);
         }
     });
@@ -43,6 +51,7 @@ $('.eqLogicAction[data-action=scanClients]').on('click', function () {
 $('.eqLogicAction[data-action=gotoPluginConf]').on('click', function () {
     window.location.href = 'index.php?v=d&p=plugin&id=jellyfin';
 });
+
 
 // --- EXPLORATEUR DE BIBLIOTHÈQUE ---
 
@@ -86,7 +95,7 @@ var JellyfinBrowser = {
         JellyfinBrowser.currentPath = [];
         JellyfinBrowser.selectedItem = null;
 
-        var titleStr = "<span style='color:#fff;'><i class='fas fa-film'></i> Bibliothèque Jellyfin";
+        var titleStr = "<span style='color:#fff;'><i class='fas fa-film'></i> " + _t("Bibliothèque Jellyfin");
         if(JellyfinBrowser.currentEqLogicName !== "") {
             titleStr += " <span style='color:#888; margin:0 5px;'>|</span> <span style='color:#1DB954; font-weight:bold;'>" + JellyfinBrowser.currentEqLogicName + "</span>";
         }
@@ -96,11 +105,20 @@ var JellyfinBrowser = {
             title: titleStr,
             message: `
                 <div id="jellyfin-browser-container" style="height: 70vh; display: flex; flex-direction: column;">
-                    <div id="jellyfin-breadcrumbs" style="padding: 10px; background: #333; border-bottom: 1px solid #444; color: #fff; font-size: 14px;">
-                        <span class="cursor hover-text" onclick="JellyfinBrowser.loadFolder('')"><i class="fas fa-home"></i> Accueil</span>
+                    <div id="jellyfin-top-bar" style="padding: 10px; background: #333; border-bottom: 1px solid #444; color: #fff; font-size: 14px; display: flex; align-items: center; justify-content: space-between;">
+                        <div id="jellyfin-breadcrumbs" style="flex-grow: 1; margin-right: 10px;">
+                            <span class="cursor hover-text" onclick="JellyfinBrowser.loadFolder('')"><i class="fas fa-home"></i> ${_t("Accueil")}</span>
+                        </div>
+                        <div class="input-group" style="width: 200px;">
+                             <input type="text" id="jellyfin-search-input" class="form-control input-sm" placeholder="${_t("Rechercher...")}" style="background: #222; border: 1px solid #444; color: #fff;">
+                             <span class="input-group-btn">
+                                <button class="btn btn-default btn-sm" type="button" onclick="JellyfinBrowser.search()" style="background: #444; border: 1px solid #444; color: #fff;"><i class="fas fa-search"></i></button>
+                             </span>
+                        </div>
                     </div>
+
                     <div id="jellyfin-browser-content" style="flex-grow: 1; overflow-y: auto; padding: 20px; background: #202020; display: flex; flex-wrap: wrap; align-content: flex-start;">
-                        <div style="width: 100%; text-align: center; margin-top: 50px; color: #ccc;"><i class="fas fa-spinner fa-spin fa-3x"></i><br>Chargement...</div>
+                        <div style="width: 100%; text-align: center; margin-top: 50px; color: #ccc;"><i class="fas fa-spinner fa-spin fa-3x"></i><br>${_t("Chargement...")}</div>
                     </div>
                     <div id="jellyfin-selection-info" style="display:none; padding: 15px; background: #2b2b2b; border-top: 1px solid #444; color: #fff; min-height: 100px;">
                          <div style="display: flex;">
@@ -109,7 +127,7 @@ var JellyfinBrowser = {
                              </div>
                              <div style="flex-grow: 1;">
                                  <div style="font-size: 18px; font-weight:bold; color: #1DB954; margin-bottom: 5px;">
-                                    <span id="sel-title">Aucun</span>
+                                    <span id="sel-title">${_t("Aucun")}</span>
                                  </div>
                                  <div style="font-size: 13px; color: #aaa; margin-bottom: 8px;">
                                     <span id="sel-year"></span> <span id="sel-duration" style="margin-left:10px; color:#bbb; background:#444; padding:1px 5px; border-radius:3px;"></span>
@@ -136,39 +154,37 @@ var JellyfinBrowser = {
                     .hover-text:hover { color: #1DB954; text-decoration: underline; }
                     #sel-overview::-webkit-scrollbar { width: 4px; }
                     #sel-overview::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
-                    
-                    /* STYLE DU BOUTON FAVORI (ROUGE CERISE) */
                     .btn-favorite { background-color: #c23642 !important; border-color: #c23642 !important; color: white !important; }
                     .btn-favorite:hover { background-color: #d64552 !important; border-color: #d64552 !important; }
                 </style>
             `,
             buttons: {
                 cancel: { 
-                    label: "Annuler", 
+                    label: _t("Annuler"), 
                     className: "btn-default pull-left", 
                     callback: function () {} 
                 },
                 createCmd: {
-                    label: "<i class='fas fa-heart'></i> Ajouter aux favoris", 
+                    label: "<i class='fas fa-heart'></i> " + _t("Ajouter aux favoris"), 
                     className: "btn-favorite", 
                     callback: function (e) {
                         if (JellyfinBrowser.selectedItem) {
                             var item = JellyfinBrowser.selectedItem;
                             JellyfinBrowser.createCommand(item.Id, item.Name, item.ImgTag, e.target);
                         } else {
-                            bootbox.alert("Veuillez sélectionner un média.");
+                            bootbox.alert(_t("Veuillez sélectionner un média."));
                         }
                         return false; 
                     }
                 },
                 playNow: {
-                    label: "<i class='fas fa-play'></i> Lire maintenant",
+                    label: "<i class='fas fa-play'></i> " + _t("Lire maintenant"),
                     className: "btn-success",
                     callback: function () {
                         if (JellyfinBrowser.selectedItem) {
                             JellyfinBrowser.playItem(JellyfinBrowser.selectedItem.Id, 'play_now');
                         } else {
-                            bootbox.alert("Veuillez sélectionner un média.");
+                            bootbox.alert(_t("Veuillez sélectionner un média."));
                             return false; 
                         }
                     }
@@ -181,6 +197,13 @@ var JellyfinBrowser = {
             },
             className: 'jellyfin-modal-fullscreen'
         });
+        
+        // GESTION DU CLAVIER (Touche Entrée)
+        $('#jellyfin-search-input').on('keypress', function (e) {
+            if (e.which === 13) {
+                JellyfinBrowser.search();
+            }
+        });
 
         $('#jellyfin-selection-info').hide();
         JellyfinBrowser.loadFolder('');
@@ -191,9 +214,44 @@ var JellyfinBrowser = {
         JellyfinBrowser.currentPath = JellyfinBrowser.currentPath.slice(0, index);
         JellyfinBrowser.loadFolder(target.id, target.name);
     },
+    
+    // NOUVELLE FONCTION DE RECHERCHE
+    search: function() {
+        var searchTerm = $('#jellyfin-search-input').val();
+        if(searchTerm === "") {
+             JellyfinBrowser.loadFolder(''); // Si vide, on recharge l'accueil
+             return;
+        }
+
+        $('#jellyfin-browser-content').html('<div style="width: 100%; text-align: center; margin-top: 50px; color: #ccc;"><i class="fas fa-spinner fa-spin fa-3x"></i><br>' + _t("Recherche...") + '</div>');
+        $('#jellyfin-selection-info').hide();
+        JellyfinBrowser.selectedItem = null;
+        
+        // Mise à jour du fil d'ariane pour indiquer la recherche
+        var bcHtml = '<span class="cursor hover-text" onclick="JellyfinBrowser.loadFolder(\'\')"><i class="fas fa-home"></i> ' + _t("Accueil") + '</span>';
+        bcHtml += ' <span style="color:#888;">&gt;</span> <span class="label label-primary" style="background:#1DB954;">Recherche : ' + searchTerm + '</span>';
+        $('#jellyfin-breadcrumbs').html(bcHtml);
+
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'getLibrary', search: searchTerm }, // On envoie 'search'
+            dataType: 'json',
+            success: function (data) {
+                if (data.state != 'ok') {
+                    $('#jellyfin-browser-content').html('<div class="alert alert-danger">' + data.result + '</div>');
+                    return;
+                }
+                JellyfinBrowser.renderItems(data.result);
+            }
+        });
+    },
 
     loadFolder: function (parentId, parentName) {
-        $('#jellyfin-browser-content').html('<div style="width: 100%; text-align: center; margin-top: 50px; color: #ccc;"><i class="fas fa-spinner fa-spin fa-3x"></i><br>Chargement...</div>');
+        // Vider le champ de recherche quand on navigue
+        $('#jellyfin-search-input').val(''); 
+
+        $('#jellyfin-browser-content').html('<div style="width: 100%; text-align: center; margin-top: 50px; color: #ccc;"><i class="fas fa-spinner fa-spin fa-3x"></i><br>' + _t("Chargement...") + '</div>');
         $('#jellyfin-selection-info').hide();
         JellyfinBrowser.selectedItem = null;
 
@@ -203,7 +261,7 @@ var JellyfinBrowser = {
             JellyfinBrowser.currentPath.push({id: parentId, name: parentName}); 
         }
         
-        var bcHtml = '<span class="cursor hover-text" onclick="JellyfinBrowser.loadFolder(\'\')"><i class="fas fa-home"></i> Accueil</span>';
+        var bcHtml = '<span class="cursor hover-text" onclick="JellyfinBrowser.loadFolder(\'\')"><i class="fas fa-home"></i> ' + _t("Accueil") + '</span>';
         
         $.each(JellyfinBrowser.currentPath, function(idx, item){
              bcHtml += ' <span style="color:#888;">&gt;</span> ';
@@ -238,8 +296,8 @@ var JellyfinBrowser = {
             container.html(`
                 <div style="width:100%; text-align:center; padding:50px; color: #777; font-size: 1.2em;">
                     <i class="fas fa-network-wired" style="font-size: 30px; margin-bottom: 10px; opacity: 0.5;"></i><br>
-                    Dossier vide<br>
-                    <span style="font-size: 0.8em; color: #666;">(Ou serveur Jellyfin hors ligne)</span>
+                    ${_t("Aucun résultat")}<br>
+                    <span style="font-size: 0.8em; color: #666;">(${_t("Ou serveur Jellyfin hors ligne")})</span>
                 </div>
             `);
             return;
@@ -284,7 +342,7 @@ var JellyfinBrowser = {
         if (rating) { $('#sel-rating').html('<i class="fas fa-star"></i> ' + rating); } 
         else { $('#sel-rating').html(''); }
 
-        $('#sel-overview').text(overview ? overview : "Pas de résumé disponible.");
+        $('#sel-overview').text(overview ? overview : _t("Pas de résumé disponible."));
         if (imgUrl) { $('#sel-img').attr('src', imgUrl); $('#sel-img-container').show(); } 
         else { $('#sel-img-container').hide(); }
 
@@ -294,14 +352,14 @@ var JellyfinBrowser = {
     playItem: function (itemId, mode) {
         var btn = $('.btn-success');
         var originalText = btn.html();
-        btn.html('<i class="fas fa-spinner fa-spin"></i> Envoi...');
+        btn.html('<i class="fas fa-spinner fa-spin"></i> ' + _t("Envoi..."));
         $.ajax({
             type: 'POST',
             url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
             data: { action: 'play_media', id: JellyfinBrowser.currentEqLogicId, mediaId: itemId, mode: mode },
             dataType: 'json',
             success: function (data) {
-                if (data.state != 'ok') { bootbox.alert("Erreur : " + data.result); btn.html(originalText); } 
+                if (data.state != 'ok') { bootbox.alert(_t("Erreur : ") + data.result); btn.html(originalText); } 
                 else { bootbox.hideAll(); }
             }
         });
@@ -309,8 +367,8 @@ var JellyfinBrowser = {
 
     createCommand: function (itemId, name, imgTag, btnElement) {
         var btn = (btnElement) ? $(btnElement).closest('.btn') : $('.jellyfin-modal-fullscreen .modal-footer .btn-info');
-        var originalText = "<i class='fas fa-heart'></i> Ajouter aux favoris"; 
-        btn.html('<i class="fas fa-spinner fa-spin"></i> Ajout...');
+        var originalText = "<i class='fas fa-heart'></i> " + _t("Ajouter aux favoris"); 
+        btn.html('<i class="fas fa-spinner fa-spin"></i> ' + _t("Ajout..."));
         $.ajax({
             type: 'POST',
             url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
@@ -320,12 +378,12 @@ var JellyfinBrowser = {
                 btn.html(originalText);
                 if (data.state != 'ok') {
                     if(data.result && data.result.indexOf("existe déjà") !== -1) {
-                         var notif = $('<div style="position:fixed; top:20px; right:20px; background:#f39c12; color:white; padding:15px; border-radius:5px; z-index:9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">Déjà dans les favoris</div>');
+                         var notif = $('<div style="position:fixed; top:20px; right:20px; background:#f39c12; color:white; padding:15px; border-radius:5px; z-index:9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">' + _t("Déjà dans les favoris") + '</div>');
                          $('body').append(notif);
                          setTimeout(function(){ notif.fadeOut(500, function(){ $(this).remove(); }); }, 2000);
-                    } else { bootbox.alert("Erreur : " + data.result); }
+                    } else { bootbox.alert(_t("Erreur : ") + data.result); }
                 } else {
-                    var notif = $('<div style="position:fixed; top:20px; right:20px; background:#1DB954; color:white; padding:15px; border-radius:5px; z-index:9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-weight:bold;"><i class="fas fa-check"></i> Favori ajouté !</div>');
+                    var notif = $('<div style="position:fixed; top:20px; right:20px; background:#1DB954; color:white; padding:15px; border-radius:5px; z-index:9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-weight:bold;"><i class="fas fa-check"></i> ' + _t("Favori ajouté !") + '</div>');
                     $('body').append(notif);
                     setTimeout(function(){ notif.fadeOut(500, function(){ $(this).remove(); }); }, 2000);
                 }

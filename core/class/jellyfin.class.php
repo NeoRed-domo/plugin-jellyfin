@@ -34,7 +34,6 @@ class jellyfin extends eqLogic {
         $dep = self::dependancy_info();
         if ($dep['state'] != 'ok') {
             $return['launchable'] = 'nok';
-            // Traduction ajoutée ici
             $return['launchable_message'] = __('Les dépendances ne sont pas installées', __FILE__);
         }
         $pid_file = jeedom::getTmpFolder('jellyfin') . '/jellyfin.pid';
@@ -48,7 +47,6 @@ class jellyfin extends eqLogic {
     public static function deamon_start() {
         self::deamon_stop();
         $deamon_info = self::deamon_info();
-        // Traduction ajoutée ici
         if ($deamon_info['launchable'] != 'ok') throw new Exception(__('Veuillez vérifier la configuration ou les dépendances', __FILE__));
 
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
@@ -63,7 +61,6 @@ class jellyfin extends eqLogic {
         $jellyfin_full_url = (strpos($ip, 'http') === false) ? 'http://' . $ip . ':' . $port : $ip . ':' . $port;
         $path = realpath(__DIR__ . '/../../resources/daemon');
         $script = $path . '/jellyfind.py';
-        // Traduction ajoutée ici
         if (!file_exists($script)) throw new Exception(__('Script Python introuvable', __FILE__));
 
         $jeedomLogLevel = log::getLogLevel('jellyfin_daemon');
@@ -169,9 +166,11 @@ class jellyfin extends eqLogic {
             $positionTicks = isset($sessionData['position_ticks']) ? (int)$sessionData['position_ticks'] : 0;
 
             if ($statusStr == 'Stopped') {
-                $eqLogic->checkAndUpdateCmd('duration', '00:00:00');
-                $eqLogic->checkAndUpdateCmd('position', '00:00:00');
-                $eqLogic->checkAndUpdateCmd('remaining', '00:00:00');
+                // MODIFICATION ICI : On envoie --:-- au lieu de 00:00:00
+                $eqLogic->checkAndUpdateCmd('duration', '--:--');
+                $eqLogic->checkAndUpdateCmd('position', '--:--');
+                $eqLogic->checkAndUpdateCmd('remaining', '--:--');
+                
                 $eqLogic->checkAndUpdateCmd('duration_num', '000000');
                 $eqLogic->checkAndUpdateCmd('position_num', '000000');
                 $eqLogic->checkAndUpdateCmd('remaining_num', '000000');
@@ -213,7 +212,9 @@ class jellyfin extends eqLogic {
                     if ($imgData && strlen($imgData) > 500) {
                         $headerHex = bin2hex(substr($imgData, 0, 2));
                         $mimeType = ($headerHex == '8950') ? 'image/png' : 'image/jpeg';
-                        $htmlImg = '<img class="img-responsive" style="border-radius: 10px;" src="data:' . $mimeType . ';base64,' . base64_encode($imgData) . '">';
+                        
+                        $htmlImg = '<img class="img-responsive" data-media-id="' . $imageItemId . '" style="border-radius: 10px;" src="data:' . $mimeType . ';base64,' . base64_encode($imgData) . '">';
+                        
                         $eqLogic->checkAndUpdateCmd('cover', $htmlImg);
                         $eqLogic->setConfiguration('last_image_id', $imageItemId);
                         $eqLogic->save();
@@ -244,9 +245,11 @@ class jellyfin extends eqLogic {
                         $jellyfinEq->checkAndUpdateCmd('status', 'Stopped');
                         $jellyfinEq->checkAndUpdateCmd('title', '');
                         $jellyfinEq->checkAndUpdateCmd('media_type', '');
-                        $jellyfinEq->checkAndUpdateCmd('duration', '00:00:00');
-                        $jellyfinEq->checkAndUpdateCmd('position', '00:00:00');
-                        $jellyfinEq->checkAndUpdateCmd('remaining', '00:00:00');
+                        
+                        // MODIFICATION ICI : On envoie --:-- aussi
+                        $jellyfinEq->checkAndUpdateCmd('duration', '--:--');
+                        $jellyfinEq->checkAndUpdateCmd('position', '--:--');
+                        $jellyfinEq->checkAndUpdateCmd('remaining', '--:--');
                         
                         $jellyfinEq->checkAndUpdateCmd('cover', '');
                         $jellyfinEq->setConfiguration('last_image_id', 'STOPPED');
@@ -267,10 +270,6 @@ class jellyfin extends eqLogic {
     private static function determineMediaType($path) {
         if (empty($path)) return 'Autre'; 
         $path = strtolower($path);
-        // Ici, on laisse les labels en français car c'est la valeur stockée.
-        // La traduction se fera côté affichage si besoin, ou on peut traduire ici :
-        // Mais pour la cohérence des scenarios, mieux vaut garder une clé stable ou traduire via __().
-        // Pour l'instant je laisse tel quel pour ne pas casser les scenarios existants des utilisateurs.
         $checkOrder = ['filter_ad' => 'Publicité', 'filter_sound_trailer' => 'Sound Trailer', 'filter_trailer' => 'Bande Annonce', 'filter_movie' => 'Film', 'filter_series' => 'Série', 'filter_audio' => 'Audio'];
         foreach ($checkOrder as $configKey => $typeLabel) {
             $keywords = config::byKey($configKey, 'jellyfin');
@@ -287,12 +286,10 @@ class jellyfin extends eqLogic {
     public function postSave() { $this->createCommands(); }
 
     public function createCommands() {
-        // NOMS DES COMMANDES (Traduction ajoutée sur les noms)
         $commands = [
             'Prev' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-step-backward"></i>', 'order' => 1],
             'Play' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-play"></i>', 'order' => 2],
             'Pause' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-pause"></i>', 'order' => 3],
-            // Traduction ici :
             'Play_Pause' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-play-circle"></i>', 'order' => 4, 'name' => __('Toggle Play/Pause', __FILE__)],
             'Next' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-step-forward"></i>', 'order' => 5],
             'Stop' => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-stop"></i>', 'order' => 6],
@@ -302,7 +299,6 @@ class jellyfin extends eqLogic {
             'Position' => ['type' => 'info', 'subtype' => 'string', 'order' => 10],
             'Remaining' => ['type' => 'info', 'subtype' => 'string', 'order' => 11],
             'Cover' => ['type' => 'info', 'subtype' => 'string', 'order' => 12],
-            // Traductions ici :
             'Duration_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 13, 'name' => __('Duration (Scenario)', __FILE__)],
             'Position_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 14, 'name' => __('Position (Scenario)', __FILE__)],
             'Remaining_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 15, 'name' => __('Remaining (Scenario)', __FILE__)],
@@ -431,13 +427,11 @@ class jellyfin extends eqLogic {
                 $name = str_replace('Lancer : ', '', $cmd->getName());
                 $name = str_replace('Play : ', '', $name);
                 
+                $safeName = str_replace('"', '&quot;', $name);
                 $imgUrl = self::getItemImageUrl($mediaId, $imgTag);
                 
-                // Traduction du "Supprimer" au survol
-                $deleteTitle = __('Supprimer', __FILE__);
-                
-                $shortcutsHtml .= '<div class="shortcut-item cursor" onclick="jeedom.cmd.execute({id: \'' . $cmd->getId() . '\'});" title="' . $name . '">';
-                $shortcutsHtml .= '  <i class="fas fa-times-circle delete-shortcut-btn" data-cmd_id="' . $cmd->getId() . '" title="' . $deleteTitle . '"></i>';
+                $shortcutsHtml .= '<div class="shortcut-item cursor" onclick="jeedom.cmd.execute({id: \'' . $cmd->getId() . '\'});" title="' . $safeName . '" data-medianame="' . $safeName . '">';
+                $shortcutsHtml .= '  <i class="fas fa-times-circle delete-shortcut-btn" data-cmd_id="' . $cmd->getId() . '" title=""></i>';
                 $shortcutsHtml .= '  <img src="' . $imgUrl . '">'; 
                 $shortcutsHtml .= '</div>';
             } else {
@@ -469,20 +463,27 @@ class jellyfin extends eqLogic {
         return null;
     }
 
-    public static function getLibraryItems($parentId = '') {
+    public static function getLibraryItems($parentId = '', $searchTerm = '') {
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
         $port = config::byKey('jellyfin_port', 'jellyfin');
         $apikey = config::byKey('jellyfin_apikey', 'jellyfin');
-        if (empty($ip) || empty($apikey)) return ['error' => 'Configuration incomplète'];
+        if (empty($ip) || empty($apikey)) return ['error' => __('Configuration incomplète', __FILE__)];
         $userId = self::getPrimaryUserId();
-        if (!$userId) return ['error' => 'Aucun utilisateur Jellyfin trouvé'];
+        if (!$userId) return ['error' => __('Aucun utilisateur Jellyfin trouvé', __FILE__)];
         $baseUrl = (strpos($ip, 'http') === false) ? 'http://'.$ip.':'.$port : $ip.':'.$port;
         
         $url = $baseUrl . '/Users/' . $userId . '/Items?api_key=' . $apikey;
-        if (!empty($parentId)) $url .= '&ParentId=' . $parentId;
+        
+        if (!empty($searchTerm)) {
+            $url .= '&SearchTerm=' . urlencode($searchTerm);
+            $url .= '&Recursive=true';
+            $url .= '&IncludeItemTypes=Movie,Series,MusicAlbum,Audio,BoxSet';
+        } else {
+            if (!empty($parentId)) $url .= '&ParentId=' . $parentId;
+            $url .= '&SortBy=IsFolder,SortName&SortOrder=Descending,Ascending';
+        }
         
         $url .= '&Fields=Overview,ProductionYear,CommunityRating,PremiereDate,RunTimeTicks';
-        $url .= '&SortBy=IsFolder,SortName&SortOrder=Descending,Ascending';
         
         return self::requestApi($url);
     }
@@ -541,8 +542,23 @@ class jellyfin extends eqLogic {
         $logicalId = 'media_' . $mediaId; 
 
         $cmd = $this->getCmd(null, $logicalId);
-        // Traduction ici
         if (is_object($cmd)) return __('Cette commande existe déjà', __FILE__);
+
+        if (empty($imgTag)) {
+            $ip = config::byKey('jellyfin_ip', 'jellyfin');
+            $port = config::byKey('jellyfin_port', 'jellyfin');
+            $apikey = config::byKey('jellyfin_apikey', 'jellyfin');
+            $userId = self::getPrimaryUserId();
+            
+            if (!empty($ip) && !empty($apikey) && $userId) {
+                $baseUrl = (strpos($ip, 'http') === false) ? 'http://'.$ip.':'.$port : $ip.':'.$port;
+                $url = $baseUrl . '/Users/' . $userId . '/Items/' . $mediaId . '?api_key=' . $apikey;
+                $itemData = self::requestApi($url);
+                if (isset($itemData['ImageTags']['Primary'])) {
+                    $imgTag = $itemData['ImageTags']['Primary'];
+                }
+            }
+        }
 
         $cmd = new jellyfinCmd();
         $cmd->setName("Play : " . $mediaName);
@@ -555,7 +571,6 @@ class jellyfin extends eqLogic {
         $cmd->setConfiguration('is_media_shortcut', 1); 
         if($imgTag) $cmd->setConfiguration('image_tag', $imgTag);
         $cmd->save();
-        // Traduction ici
         return __('Commande créée avec succès', __FILE__);
     }
 }

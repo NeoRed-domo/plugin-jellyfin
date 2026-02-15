@@ -62,7 +62,10 @@
         "Favori ajouté !": "Favorite added!",
         "Annuler": "Cancel",
         "Lire maintenant": "Play now",
-        "Veuillez sélectionner un média.": "Please select a media."
+        "Veuillez sélectionner un média.": "Please select a media.",
+        "Rechercher...": "Search...",
+        "Recherche...": "Searching...",
+        "Aucun résultat": "No results"
     },
     "plugins/jellyfin/core/template/dashboard/jellyfin.html": {
         "Favoris pour": "Favorites for",
