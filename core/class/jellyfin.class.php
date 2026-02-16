@@ -323,17 +323,20 @@ class jellyfin extends eqLogic {
         }
     }
 
-    public function remoteControl($commandName, $_options = null) {
+public function remoteControl($commandName, $_options = null) {
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
         $port = config::byKey('jellyfin_port', 'jellyfin');
         $apikey = config::byKey('jellyfin_apikey', 'jellyfin');
         $deviceId = $this->getConfiguration('device_id');
         if (empty($ip) || empty($deviceId)) return;
         $baseUrl = (strpos($ip, 'http') === false) ? 'http://'.$ip.':'.$port : $ip.':'.$port;
+        
+        // On récupère les infos de la session pour savoir où on en est (Position)
         $sessionData = self::getSessionDataFromDeviceId($baseUrl, $apikey, $deviceId);
         if (!$sessionData || !isset($sessionData['Id'])) return;
         $sessionId = $sessionData['Id'];
         
+        // --- GESTION DU SLIDER DE POSITION ---
         if ($commandName == 'set_position') {
             $seconds = isset($_options['slider']) ? $_options['slider'] : (isset($_options['value']) ? $_options['value'] : null);
             if ($seconds !== null) {
@@ -344,6 +347,7 @@ class jellyfin extends eqLogic {
             return;
         }
 
+        // --- GESTION DES RACCOURCIS MEDIA ---
         $cmd = $this->getCmd(null, $commandName);
         if (is_object($cmd)) {
             $mediaId = $cmd->getConfiguration('media_id');
@@ -353,15 +357,39 @@ class jellyfin extends eqLogic {
             }
         }
 
+        // --- GESTION DES BOUTONS CLASSIQUES ---
         $action = '';
+        
         switch ($commandName) {
             case 'play': $action = 'Unpause'; break;
             case 'pause': $action = 'Pause'; break;
             case 'play_pause': $action = 'PlayPause'; break;
             case 'stop': $action = 'Stop'; break;
-            case 'next': $action = 'NextTrack'; break;
-            case 'prev': $action = 'PreviousTrack'; break;
+            
+            case 'next': 
+                $action = 'NextTrack'; 
+                break;
+                
+            case 'prev': 
+                // LOGIQUE INTELLIGENTE POUR PREV
+                // Si on a lu plus de 10 secondes (10 * 10 000 000 ticks) -> On rembobine au début
+                $currentTicks = 0;
+                if (isset($sessionData['PlayState']['PositionTicks'])) {
+                    $currentTicks = $sessionData['PlayState']['PositionTicks'];
+                }
+                
+                if ($currentTicks > 30000000) {
+                    // Seek au début (0)
+                    $url = $baseUrl . '/Sessions/' . $sessionId . '/Playing/Seek?seekPositionTicks=0&api_key=' . $apikey;
+                    self::requestApi($url, 'POST');
+                    return; // On arrête là, pas besoin d'envoyer PreviousTrack
+                } else {
+                    // Sinon (on est au tout début), on demande la piste précédente
+                    $action = 'PreviousTrack';
+                }
+                break;
         }
+
         if ($action != '') {
             $url = $baseUrl . '/Sessions/' . $sessionId . '/Playing/' . $action . '?api_key=' . $apikey;
             self::requestApi($url, 'POST');
@@ -483,7 +511,7 @@ class jellyfin extends eqLogic {
             $url .= '&SortBy=IsFolder,SortName&SortOrder=Descending,Ascending';
         }
         
-        $url .= '&Fields=Overview,ProductionYear,CommunityRating,PremiereDate,RunTimeTicks';
+        $url .= '&Fields=Overview,ProductionYear,CommunityRating,PremiereDate,RunTimeTicks,MediaSources,MediaStreams';
         
         return self::requestApi($url);
     }
@@ -527,7 +555,8 @@ class jellyfin extends eqLogic {
             $url = $baseUrl . '/Sessions/' . $sessionId . '/Queue?ItemIds=' . $mediaId . '&Mode=PlayNext&api_key=' . $apikey;
         } else {
             $playCommand = 'PlayNow';
-            $url = $baseUrl . '/Sessions/' . $sessionId . '/Playing?ItemIds=' . $mediaId . '&PlayCommand=' . $playCommand . '&api_key=' . $apikey;
+            // MODIFICATION ICI : Ajout de &StartPositionTicks=0
+            $url = $baseUrl . '/Sessions/' . $sessionId . '/Playing?ItemIds=' . $mediaId . '&PlayCommand=' . $playCommand . '&StartPositionTicks=0&api_key=' . $apikey;
         }
         
         log::add('jellyfin', 'debug', 'Appel URL: ' . $url);

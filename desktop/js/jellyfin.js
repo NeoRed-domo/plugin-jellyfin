@@ -11,39 +11,42 @@ function _t(str) {
     return str; // Fallback au français si le traducteur est absent
 }
 
-$('.eqLogicAction[data-action=add]').on('click', function () {
-    $.ajax({
-        type: 'POST',
-        url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-        data: { action: 'add' },
-        dataType: 'json',
-        error: function (request, status, error) { handleAjaxError(request, status, error); },
-        success: function (data) {
-            if (data.state != 'ok') {
-                $('#div_alert').showAlert({message: data.result, level: 'danger'});
-                return;
-            }
-            $('#div_alert').showAlert({message: _t('Equipement ajouté avec succès'), level: 'success'});
-            window.location.reload();
-        }
-    });
-});
+// On écoute le nouveau nom d'action 'add_jellyfin'
+$('body').off('click', '.eqLogicAction[data-action=add_jellyfin]').on('click', '.eqLogicAction[data-action=add_jellyfin]', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
 
-$('.eqLogicAction[data-action=scanClients]').on('click', function () {
-    $('#div_alert').showAlert({message: _t('Scan en cours...'), level: 'warning'});
-    $.ajax({
-        type: 'POST',
-        url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-        data: { action: 'scanClients' },
-        dataType: 'json',
-        error: function (request, status, error) { handleAjaxError(request, status, error); },
-        success: function (data) {
-            if (data.state != 'ok') {
-                $('#div_alert').showAlert({message: data.result, level: 'danger'});
-                return;
-            }
-            $('#div_alert').showAlert({message: _t('Scan terminé ! Clients trouvés : ') + data.result, level: 'success'});
-            setTimeout(function () { window.location.reload(); }, 1000);
+    bootbox.prompt(_t('Nom de l\'équipement ?'), function (result) {
+        if (result !== null && result !== '') {
+            $.ajax({
+                type: 'POST',
+                url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                data: {
+                    action: 'add',
+                    name: result // C'est ça que le PHP va récupérer
+                },
+                dataType: 'json',
+                error: function (request, status, error) {
+                    handleAjaxError(request, status, error);
+                },
+                success: function (data) {
+                    if (data.state != 'ok') {
+                        $('#div_alert').showAlert({
+                            message: data.result,
+                            level: 'danger'
+                        });
+                        return;
+                    }
+                    $('#div_alert').showAlert({
+                        message: _t('Équipement ajouté avec succès'),
+                        level: 'success'
+                    });
+                    
+                    // CORRECTION REDIRECTION : On force l'URL complète
+                    // Cela t'emmène direct sur la page de config de l'ID créé
+                    window.location.href = 'index.php?v=d&m=jellyfin&p=jellyfin&id=' + data.result.id;
+                }
+            });
         }
     });
 });
@@ -130,8 +133,10 @@ var JellyfinBrowser = {
                                     <span id="sel-title">${_t("Aucun")}</span>
                                  </div>
                                  <div style="font-size: 13px; color: #aaa; margin-bottom: 8px;">
-                                    <span id="sel-year"></span> <span id="sel-duration" style="margin-left:10px; color:#bbb; background:#444; padding:1px 5px; border-radius:3px;"></span>
+                                    <span id="sel-year"></span> 
+                                    <span id="sel-duration" style="margin-left:10px; color:#bbb; background:#444; padding:1px 5px; border-radius:3px;"></span>
                                     <span id="sel-rating" style="margin-left:10px; color:#f39c12;"></span>
+                                    <span id="sel-tech" style="margin-left:15px; font-family: sans-serif; font-size: 11px;"></span>
                                  </div>
                                  <div id="sel-overview" style="font-size: 13px; color: #ccc; line-height: 1.4; max-height: 60px; overflow-y: auto;"></div>
                              </div>
@@ -312,6 +317,10 @@ var JellyfinBrowser = {
             var year = (item.ProductionYear) ? item.ProductionYear : '';
             var rating = (item.CommunityRating) ? item.CommunityRating : '';
             var duration = (item.RunTimeTicks) ? JellyfinBrowser.ticksToTime(item.RunTimeTicks) : '';
+            
+            // NOUVEAU : Récupération des infos techniques
+            var videoRes = (item._video_res) ? item._video_res : '';
+            var audioInfo = (item._audio_info) ? item._audio_info : '';
 
             var cardHtml = '';
             if (isFolder) {
@@ -319,13 +328,15 @@ var JellyfinBrowser = {
                 cardHtml = `<div class="jelly-card jelly-folder" onclick="JellyfinBrowser.loadFolder('${item.Id}', '${title.replace(/'/g, "\\'")}')"><div class="jelly-img-container">${imgContent}</div><div class="jelly-title">${title}</div></div>`;
             } else {
                 var imgContent = `<img src="${imageUrl}" loading="lazy" onerror="this.onerror=null;this.parentNode.innerHTML='<i class=\\'fas fa-film\\' style=\\'font-size:40px;color:#555;\\'></i>';">`;
-                cardHtml = `<div class="jelly-card jelly-media" id="card-${item.Id}" onclick="JellyfinBrowser.selectMedia('${item.Id}', '${title.replace(/'/g, "\\'")}', '${imgTag}', '${year}', '${rating}', '${overview}', '${imageUrl}', '${duration}')"><div class="jelly-img-container">${imgContent}</div><div class="jelly-title">${title}</div></div>`;
+                // MODIF : Passage des arguments videoRes et audioInfo
+                cardHtml = `<div class="jelly-card jelly-media" id="card-${item.Id}" onclick="JellyfinBrowser.selectMedia('${item.Id}', '${title.replace(/'/g, "\\'")}', '${imgTag}', '${year}', '${rating}', '${overview}', '${imageUrl}', '${duration}', '${videoRes}', '${audioInfo}')"><div class="jelly-img-container">${imgContent}</div><div class="jelly-title">${title}</div></div>`;
             }
             container.append(cardHtml);
         });
     },
 
-    selectMedia: function (itemId, title, imgTag, year, rating, overview, imgUrl, duration) {
+    // MODIF : Ajout des arguments videoRes et audioInfo
+    selectMedia: function (itemId, title, imgTag, year, rating, overview, imgUrl, duration, videoRes, audioInfo) {
         $('.jelly-card').removeClass('selected');
         $('#card-' + itemId).addClass('selected');
         JellyfinBrowser.selectedItem = {Id: itemId, Name: title, ImgTag: imgTag};
@@ -341,6 +352,21 @@ var JellyfinBrowser = {
 
         if (rating) { $('#sel-rating').html('<i class="fas fa-star"></i> ' + rating); } 
         else { $('#sel-rating').html(''); }
+
+        // --- NOUVEAU : GESTION DES BADGES TECH ---
+        var techHtml = '';
+        var badgeStyle = 'background: #333; color: #ddd; padding: 2px 6px; border-radius: 4px; border: 1px solid #555; margin-right: 6px; letter-spacing: 0.5px;';
+        
+        if (videoRes && videoRes !== '') {
+            var colorRes = '#ddd';
+            if(videoRes === '4K') colorRes = '#1DB954'; // Vert Jellyfin pour la 4K
+            techHtml += '<span style="' + badgeStyle + ' color:'+colorRes+';">' + videoRes + '</span>';
+        }
+        if (audioInfo && audioInfo !== '') {
+            techHtml += '<span style="' + badgeStyle + '">' + audioInfo + '</span>';
+        }
+        $('#sel-tech').html(techHtml);
+        // -----------------------------------------
 
         $('#sel-overview').text(overview ? overview : _t("Pas de résumé disponible."));
         if (imgUrl) { $('#sel-img').attr('src', imgUrl); $('#sel-img-container').show(); } 
@@ -391,3 +417,89 @@ var JellyfinBrowser = {
         });
     }
 };
+
+// --- AUTO-REFRESH : Signature + Détection ID Supérieur (Avec Sécurité) ---
+var _lastDbSignature = null;
+
+setInterval(function() {
+    // Sécurité : On ne lance la vérif que si la liste des équipements est visible
+    if ($('.eqLogicThumbnailContainer').is(':visible')) {
+        
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'all' },
+            dataType: 'json',
+            global: false, // Pas de spinner
+            error: function(request, status, error) {},
+            success: function(data) {
+                if (data.state == 'ok') {
+                    // Liste des IDs visibles en base
+                    var dbVisibleIds = data.result
+                        .filter(function(item) { return item.isVisible == 1; })
+                        .map(function(item) { return parseInt(item.id); }) // On force en entier
+                        .sort(function(a, b) { return a - b; }); // Tri numérique
+
+                    // 1. GESTION CLASSIQUE (Signature)
+                    // Détecte les ajouts/suppressions "normaux"
+                    var currentSignature = JSON.stringify(dbVisibleIds);
+
+                    if (_lastDbSignature === null) {
+                        _lastDbSignature = currentSignature;
+                        
+                        // --- 2. GESTION "RACE CONDITION" (Premier passage uniquement) ---
+                        // Cas : L'équipement a été recréé AVANT que le script ne démarre.
+                        
+                        // On trouve l'ID le plus grand affiché sur la page
+                        var maxDomId = 0;
+                        $('.eqLogicDisplayCard[data-eqLogic_id]').each(function() {
+                            var thisId = parseInt($(this).attr('data-eqLogic_id'));
+                            if (thisId > maxDomId) maxDomId = thisId;
+                        });
+
+                        // On cherche si la base contient un ID plus récent (plus grand)
+                        var potentialNewId = -1;
+                        for (var i = 0; i < dbVisibleIds.length; i++) {
+                            if (dbVisibleIds[i] > maxDomId) {
+                                potentialNewId = dbVisibleIds[i];
+                                break; // On a trouvé un candidat
+                            }
+                        }
+
+                        if (potentialNewId !== -1) {
+                            // C'est louche ! Un ID en base est plus récent que ce qu'on affiche.
+                            
+                            // SECURITE ANTI-BOUCLE : Est-ce qu'on a déjà refresh pour cet ID ?
+                            var lastRefreshedId = sessionStorage.getItem('jellyfin_last_autorefresh_id');
+                            
+                            if (lastRefreshedId != potentialNewId) {
+                                // C'est un VRAI nouveau (ou recréé). On refresh !
+                                if (typeof jeedom !== 'undefined' && jeedom.ui) {
+                                     $('#div_alert').showAlert({message: _t('Équipement récent détecté, finalisation...'), level: 'success'});
+                                }
+                                
+                                // On marque le coup pour ne pas boucler au prochain chargement
+                                sessionStorage.setItem('jellyfin_last_autorefresh_id', potentialNewId);
+                                
+                                setTimeout(function(){ window.location.reload(); }, 1000);
+                            } else {
+                                // C'est un "Faux Client" (Fantôme) pour lequel on a déjà refresh. On l'ignore.
+                                // console.log("Refresh ignoré pour le fantôme ID : " + potentialNewId);
+                            }
+                        }
+                        return;
+                    }
+
+                    // Suite de la gestion classique (Passages suivants)
+                    if (_lastDbSignature !== currentSignature) {
+                        if (typeof jeedom !== 'undefined' && jeedom.ui) {
+                             $('#div_alert').showAlert({message: _t('Liste des équipements modifiée, rafraîchissement...'), level: 'success'});
+                        }
+                        _lastDbSignature = currentSignature;
+                        setTimeout(function(){ window.location.reload(); }, 1000);
+                    }
+                }
+            }
+        });
+    }
+}, 5000);

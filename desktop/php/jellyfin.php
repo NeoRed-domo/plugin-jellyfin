@@ -6,11 +6,12 @@ $plugin = plugin::byId('jellyfin');
 sendVarToJS('eqType', $plugin->getId());
 $eqLogics = eqLogic::byType($plugin->getId());
 ?>
+
 <div class="row row-overflow">
     <div class="col-xs-12 eqLogicThumbnailDisplay">
         <legend><i class="fas fa-cog"></i>  <?php echo __('Gestion', __FILE__); ?></legend>
         <div class="eqLogicThumbnailContainer">
-            <div class="cursor eqLogicAction logoPrimary" data-action="add">
+            <div class="cursor eqLogicAction logoPrimary" data-action="add_jellyfin">
                 <i class="fas fa-plus-circle"></i>
                 <br>
                 <span><?php echo __('Ajouter', __FILE__); ?></span>
@@ -20,21 +21,24 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <br>
                 <span><?php echo __('Configuration', __FILE__); ?></span>
             </div>
-             <div class="cursor eqLogicAction logoSecondary" data-action="scanClients">
-                <i class="fas fa-search"></i>
-                <br>
-                <span><?php echo __('Forcer Scan', __FILE__); ?></span>
-            </div>
         </div>
         <legend><i class="fas fa-tv"></i>  <?php echo __('Mes Lecteurs Jellyfin', __FILE__); ?></legend>
         <div class="eqLogicThumbnailContainer">
             <?php
             foreach ($eqLogics as $eqLogic) {
                 $opacity = ($eqLogic->getIsEnable()) ? '' : 'opacity:0.3;';
-                echo '<div class="eqLogicDisplayCard cursor" data-eqLogic_id="' . $eqLogic->getId() . '" style="text-align: center; background-color : #ffffff; height : 200px;margin-bottom : 10px;padding : 5px;border-radius: 2px;width : 160px;margin-left : 10px;' . $opacity . '">';
+                
+                // MODIF 1 : Ajout de !important sur la height pour forcer l'affichage
+                // On garde une hauteur fixe (300px) pour que la grille reste alignée proprement
+                echo '<div class="eqLogicDisplayCard cursor" data-eqLogic_id="' . $eqLogic->getId() . '" style="text-align: center; background-color : #ffffff; height : 220px !important; margin-bottom : 10px; padding : 5px; border-radius: 2px; width : 160px; margin-left : 10px;' . $opacity . '">';
+                
                 echo '<img src="' . $plugin->getPathImgIcon() . '" height="105" width="95" />';
                 echo "<br>";
-                echo '<span style="font-size : 1.1em;position:relative; top : 15px;word-break: break-all;white-space: pre-wrap;word-wrap: break-word;">' . $eqLogic->getHumanName(true, true) . '</span>';
+                
+                // MODIF 2 : Texte en display block avec hauteur automatique pour prendre la place nécessaire
+                // word-break assure que les mots très longs ne sortent pas du cadre
+                echo '<span style="display: block; margin-top: 10px; font-size: 1.1em; word-break: break-word; overflow: hidden;">' . $eqLogic->getHumanName(true, true) . '</span>';
+                
                 echo '</div>';
             }
             ?>
