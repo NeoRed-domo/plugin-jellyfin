@@ -88,7 +88,18 @@ class jellyfin extends eqLogic {
         $pid_file = jeedom::getTmpFolder('jellyfin') . '/jellyfin.pid';
         if (file_exists($pid_file)) {
             $pid = trim(file_get_contents($pid_file));
-            if ($pid != '') posix_kill($pid, 9);
+            if ($pid != '' && @posix_kill($pid, 0)) {
+                posix_kill($pid, 15); // SIGTERM : arrêt propre
+                // On attend jusqu'à 2 secondes que le process se termine
+                for ($i = 0; $i < 20; $i++) {
+                    usleep(100000); // 100ms
+                    if (!@posix_kill($pid, 0)) break; // Process terminé
+                }
+                // Si toujours vivant, on force
+                if (@posix_kill($pid, 0)) {
+                    posix_kill($pid, 9); // SIGKILL
+                }
+            }
             unlink($pid_file);
         }
     }
