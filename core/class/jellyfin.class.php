@@ -991,8 +991,8 @@ public function remoteControl($commandName, $_options = null) {
         }
     }
 
-    const MAX_LAUNCH_RETRIES = 2;
-    const LAUNCH_TIMEOUT = 5;     // secondes pour qu'un média démarre
+    const MAX_LAUNCH_RETRIES = 1;
+    const LAUNCH_TIMEOUT = 15;    // secondes pour qu'un média démarre
     const STUCK_TIMEOUT = 30;     // secondes sans changement de position = bloqué
     const QUEUE_GRACE_PERIOD = 2; // secondes d'attente pour l'auto-avancement Jellyfin après queue
 
@@ -1050,7 +1050,13 @@ public function remoteControl($commandName, $_options = null) {
                 $engineState['launch_retries'] = $retries + 1;
                 $engineState['media_launch_at'] = $now;
                 log::add('jellyfin', 'warning', 'Média ne démarre pas, retry ' . ($retries + 1) . '/' . self::MAX_LAUNCH_RETRIES . ': ' . $currentMediaId);
-                $playerEq->playMedia($currentMediaId, 'play_now');
+                // PlayNow direct SANS STOP (le STOP tue le chargement en cours)
+                $deviceId = $playerEq->getConfiguration('device_id');
+                $jellySession = self::getSessionDataFromDeviceId($config['baseUrl'], $config['apikey'], $deviceId);
+                if ($jellySession && isset($jellySession['Id'])) {
+                    $url = $config['baseUrl'] . '/Sessions/' . $jellySession['Id'] . '/Playing?ItemIds=' . $currentMediaId . '&PlayCommand=PlayNow&StartPositionTicks=0&api_key=' . $config['apikey'];
+                    self::requestApi($url, 'POST', null, false, 2);
+                }
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
