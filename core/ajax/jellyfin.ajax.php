@@ -343,15 +343,59 @@ if (init('action') == 'add') {
         $mediaId = init('mediaId');
         if (empty($mediaId)) throw new Exception(__('ID média requis', __FILE__));
 
+        $config = jellyfin::getBaseConfig();
+        if (!$config) throw new Exception(__('Configuration Jellyfin incomplète', __FILE__));
+
+        // Retourner l'URL de streaming direct Jellyfin
+        $streamUrl = $config['baseUrl'] . '/Videos/' . $mediaId . '/stream?static=true&api_key=' . $config['apikey'];
+        ajax::success(['stream_url' => $streamUrl]);
+    }
+
+    if (init('action') == 'refresh_session_durations') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        $config = jellyfin::getBaseConfig();
+        if (!$config) throw new Exception(__('Configuration Jellyfin incomplète', __FILE__));
+        $userId = jellyfin::getPrimaryUserId();
+        if (!$userId) throw new Exception(__('Aucun utilisateur Jellyfin trouvé', __FILE__));
+
         $sessionData = $eqLogic->getConfiguration('session_data');
-        $playerId = $sessionData['player_id'] ?? null;
-        if (empty($playerId)) throw new Exception(__('Aucun lecteur sélectionné', __FILE__));
+        $sessionType = $eqLogic->getConfiguration('session_type');
+        $updated = 0;
 
-        $player = jellyfin::byId($playerId);
-        if (!is_object($player)) throw new Exception(__('Lecteur introuvable', __FILE__));
+        if ($sessionType == 'cinema') {
+            foreach ($sessionData['sections'] as $sectionKey => &$section) {
+                foreach ($section['triggers'] as &$trigger) {
+                    if ($trigger['type'] == 'media' && !empty($trigger['media_id'])) {
+                        $url = $config['baseUrl'] . '/Users/' . $userId . '/Items/' . $trigger['media_id'] . '?api_key=' . $config['apikey'] . '&Fields=RunTimeTicks';
+                        $itemData = jellyfin::requestApi($url);
+                        if ($itemData && isset($itemData['RunTimeTicks'])) {
+                            $trigger['duration_ticks'] = $itemData['RunTimeTicks'];
+                            $updated++;
+                        }
+                    }
+                }
+            }
+            unset($section, $trigger);
+        } else {
+            foreach ($sessionData['playlist'] as &$trigger) {
+                if ($trigger['type'] == 'media' && !empty($trigger['media_id'])) {
+                    $url = $config['baseUrl'] . '/Users/' . $userId . '/Items/' . $trigger['media_id'] . '?api_key=' . $config['apikey'] . '&Fields=RunTimeTicks';
+                    $itemData = jellyfin::requestApi($url);
+                    if ($itemData && isset($itemData['RunTimeTicks'])) {
+                        $trigger['duration_ticks'] = $itemData['RunTimeTicks'];
+                        $updated++;
+                    }
+                }
+            }
+            unset($trigger);
+        }
 
-        $result = $player->playMedia($mediaId, 'play_now');
-        ajax::success($result);
+        $eqLogic->setConfiguration('session_data', $sessionData);
+        $eqLogic->save();
+        ajax::success(['updated' => $updated]);
     }
 
     if (init('action') == 'calibrate_set_mark') {

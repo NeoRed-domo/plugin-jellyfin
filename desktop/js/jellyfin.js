@@ -632,6 +632,7 @@ var SessionEditor = {
         html += '  <div style="display:flex; gap:6px;">';
         html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
         html += '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.openFromEditor()"><i class="fas fa-crosshairs"></i> ' + _t('Calibrer tops') + '</button>';
+        html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.refreshDurations()"><i class="fas fa-sync"></i> ' + _t('Rafraîchir durées') + '</button>';
         html += '  </div>';
         html += '</div>';
 
@@ -906,6 +907,23 @@ var SessionEditor = {
         SessionEditor.load(SessionEditor.eqLogicId);
     },
 
+    refreshDurations: function() {
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'refresh_session_durations', id: SessionEditor.eqLogicId },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state == 'ok') {
+                    $('#div_alert').showAlert({ message: data.result.updated + ' ' + _t('durée(s) mise(s) à jour'), level: 'success' });
+                    SessionEditor.reload();
+                } else {
+                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                }
+            }
+        });
+    },
+
     startSession: function() {
         $.ajax({
             type: 'POST',
@@ -973,12 +991,9 @@ var SessionEditor = {
 
 var CalibrationModal = {
     sessionId: null,
-    playerId: null,
     marks: {},
-    pollInterval: null,
-    cmdIds: {},
-    currentPositionSec: 0,
-    totalDurationSec: 0,
+    videoEl: null,
+    updateInterval: null,
 
     openFromEditor: function() {
         if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) {
@@ -997,35 +1012,30 @@ var CalibrationModal = {
             bootbox.alert(_t('Ajoutez d\'abord un film dans la section Film.'));
             return;
         }
-        CalibrationModal.open(SessionEditor.eqLogicId, filmMedia.media_id, filmMedia.name, SessionEditor.sessionData.player_id, filmSection.marks || {});
+        CalibrationModal.open(SessionEditor.eqLogicId, filmMedia.media_id, filmMedia.name, filmSection.marks || {});
     },
 
-    open: function(sessionId, mediaId, mediaName, playerId, existingMarks) {
+    open: function(sessionId, mediaId, mediaName, existingMarks) {
         CalibrationModal.sessionId = sessionId;
-        CalibrationModal.playerId = playerId;
         CalibrationModal.marks = $.extend({}, existingMarks);
-        CalibrationModal.cmdIds = {};
-        CalibrationModal.currentPositionSec = 0;
-        CalibrationModal.totalDurationSec = 0;
 
-        // Charger les IDs des commandes du lecteur via notre AJAX
+        // Récupérer l'URL de streaming
         $.ajax({
             type: 'POST',
             url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-            data: { action: 'get_player_cmd_ids', player_id: playerId },
+            data: { action: 'calibrate_start', id: sessionId, mediaId: mediaId },
             dataType: 'json',
             success: function(data) {
                 if (data.state != 'ok') {
                     bootbox.alert(_t('Erreur: ') + (data.result || ''));
                     return;
                 }
-                CalibrationModal.cmdIds = data.result;
-                CalibrationModal._openModal(sessionId, mediaId, mediaName, existingMarks);
+                CalibrationModal._openModal(mediaName, data.result.stream_url, existingMarks);
             }
         });
     },
 
-    _openModal: function(sessionId, mediaId, mediaName, existingMarks) {
+    _openModal: function(mediaName, streamUrl, existingMarks) {
         var markLabels = SessionEditor.marksMeta ? SessionEditor.marksMeta.labels : {
             'pre_generique': 'Pré-générique', 'generique_1': 'Générique 1', 'post_film_1': 'Post film 1',
             'generique_2': 'Générique 2', 'post_film_2': 'Post film 2', 'fin': 'Fin'
@@ -1044,25 +1054,34 @@ var CalibrationModal = {
             marksHtml += '</div>';
         }
 
-        var html = '<div style="text-align:center; margin-bottom:15px;">' +
-            '<div style="font-size:24px; font-family:monospace; color:#fff;" id="calib-position">00:00:00</div>' +
-            '<div style="font-size:11px; color:#666; font-family:monospace;" id="calib-total">/ --:--:--</div>' +
-            '<div style="margin:10px 0; height:12px; background:#333; border-radius:6px; cursor:pointer; position:relative;" id="calib-progress-bar">' +
-            '  <div id="calib-progress-fill" style="height:100%; background:#1DB954; border-radius:6px; width:0%; transition:width 0.3s;"></div>' +
+        var html = '<div style="display:flex; gap:15px; flex-wrap:wrap;">' +
+            '<div style="flex:1; min-width:300px;">' +
+            '  <video id="calib-video" style="width:100%; border-radius:6px; background:#000; max-height:40vh;" controls></video>' +
+            '  <div style="text-align:center; margin-top:8px;">' +
+            '    <span style="font-size:20px; font-family:monospace; color:#fff;" id="calib-position">00:00:00</span>' +
+            '    <span style="font-size:12px; color:#666; font-family:monospace;" id="calib-total"> / --:--:--</span>' +
+            '  </div>' +
+            '  <div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">' +
+            '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(-10)"><i class="fas fa-backward"></i> -10s</button>' +
+            '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(-1)"><i class="fas fa-step-backward"></i> -1s</button>' +
+            '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.togglePause()"><i class="fas fa-pause" id="calib-pause-icon"></i></button>' +
+            '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(1)"><i class="fas fa-step-forward"></i> +1s</button>' +
+            '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(10)"><i class="fas fa-forward"></i> +10s</button>' +
+            '  </div>' +
             '</div>' +
-            '<div style="display:flex; justify-content:center; gap:8px; margin-bottom:15px;">' +
-            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(-10)"><i class="fas fa-backward"></i> -10s</button>' +
-            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(-1)"><i class="fas fa-step-backward"></i> -1s</button>' +
-            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.togglePause()"><i class="fas fa-pause" id="calib-pause-icon"></i></button>' +
-            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(1)"><i class="fas fa-step-forward"></i> +1s</button>' +
-            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(10)"><i class="fas fa-forward"></i> +10s</button>' +
-            '</div></div>' +
-            '<div style="background:#1a1a1a; border-radius:4px; padding:10px;">' + marksHtml + '</div>';
+            '<div style="flex:0 0 280px;">' +
+            '  <div style="background:#1a1a1a; border-radius:4px; padding:10px;">' +
+            '    <div style="color:#aaa; font-size:11px; text-transform:uppercase; font-weight:bold; margin-bottom:8px;"><i class="fas fa-crosshairs"></i> ' + _t('Marqueurs') + '</div>' +
+            '    ' + marksHtml +
+            '  </div>' +
+            '</div>' +
+            '</div>';
 
         bootbox.dialog({
             title: '<i class="fas fa-crosshairs"></i> ' + _t('Calibrage') + ' — ' + mediaName,
             message: html,
             className: 'jellyfin-modal-fullscreen',
+            onEscape: function() { CalibrationModal.close(); },
             buttons: {
                 cancel: { label: _t('Annuler'), className: 'btn-default', callback: function() { CalibrationModal.close(); } },
                 save: {
@@ -1072,94 +1091,45 @@ var CalibrationModal = {
             }
         });
 
-        // Seek sur clic barre
+        // Initialiser le lecteur vidéo
         setTimeout(function() {
-            $('#calib-progress-bar').on('click', function(e) {
-                var pct = (e.pageX - $(this).offset().left) / $(this).width();
-                CalibrationModal.seekTo(pct);
-            });
-        }, 300);
+            CalibrationModal.videoEl = document.getElementById('calib-video');
+            if (CalibrationModal.videoEl) {
+                CalibrationModal.videoEl.src = streamUrl;
+                CalibrationModal.videoEl.play().catch(function() {});
 
-        // Lancer la lecture
-        $.ajax({
-            type: 'POST',
-            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-            data: { action: 'calibrate_start', id: sessionId, mediaId: mediaId },
-            dataType: 'json',
-            success: function(data) {
-                if (data.state != 'ok') bootbox.alert(_t('Erreur: ') + (data.result || ''));
+                // Mise à jour position en temps réel
+                CalibrationModal.updateInterval = setInterval(function() {
+                    var v = CalibrationModal.videoEl;
+                    if (!v || !v.duration) return;
+                    $('#calib-position').text(CalibrationModal.secondsToTime(Math.floor(v.currentTime)));
+                    $('#calib-total').text('/ ' + CalibrationModal.secondsToTime(Math.floor(v.duration)));
+                }, 200);
             }
-        });
-
-        // Polling position via API Jeedom (pas via DOM widget)
-        CalibrationModal.pollInterval = setInterval(CalibrationModal.updatePosition, 500);
-    },
-
-    updatePosition: function() {
-        $.ajax({
-            type: 'POST',
-            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-            data: { action: 'get_player_position', player_id: CalibrationModal.playerId },
-            dataType: 'json',
-            global: false,
-            success: function(data) {
-                if (data.state != 'ok') return;
-                var posText = data.result.position || '--:--';
-                var durText = data.result.duration || '--:--';
-                CalibrationModal.currentPositionSec = CalibrationModal.timeToSeconds(posText);
-                CalibrationModal.totalDurationSec = CalibrationModal.timeToSeconds(durText);
-                $('#calib-position').text(posText);
-                $('#calib-total').text('/ ' + durText);
-                if (CalibrationModal.totalDurationSec > 0) {
-                    var pct = (CalibrationModal.currentPositionSec / CalibrationModal.totalDurationSec) * 100;
-                    $('#calib-progress-fill').css('width', pct + '%');
-                }
-            }
-        });
+        }, 500);
     },
 
     seek: function(delta) {
-        var newPos = Math.max(0, CalibrationModal.currentPositionSec + delta);
-        var cmdId = CalibrationModal.cmdIds['set_position'];
-        if (!cmdId) return;
-        $.ajax({
-            type: 'POST',
-            url: 'core/ajax/cmd.ajax.php',
-            data: { action: 'execCmd', id: cmdId, value: JSON.stringify({slider: newPos}) },
-            dataType: 'json',
-            global: false
-        });
-    },
-
-    seekTo: function(pct) {
-        if (CalibrationModal.totalDurationSec <= 0) return;
-        var newPos = Math.floor(pct * CalibrationModal.totalDurationSec);
-        var cmdId = CalibrationModal.cmdIds['set_position'];
-        if (!cmdId) return;
-        $.ajax({
-            type: 'POST',
-            url: 'core/ajax/cmd.ajax.php',
-            data: { action: 'execCmd', id: cmdId, value: JSON.stringify({slider: newPos}) },
-            dataType: 'json',
-            global: false
-        });
+        if (!CalibrationModal.videoEl) return;
+        CalibrationModal.videoEl.currentTime = Math.max(0, Math.min(CalibrationModal.videoEl.duration || 0, CalibrationModal.videoEl.currentTime + delta));
     },
 
     togglePause: function() {
-        var cmdId = CalibrationModal.cmdIds['play_pause'];
-        if (!cmdId) return;
-        $.ajax({
-            type: 'POST',
-            url: 'core/ajax/cmd.ajax.php',
-            data: { action: 'execCmd', id: cmdId },
-            dataType: 'json',
-            global: false
-        });
+        if (!CalibrationModal.videoEl) return;
+        if (CalibrationModal.videoEl.paused) {
+            CalibrationModal.videoEl.play();
+            $('#calib-pause-icon').attr('class', 'fas fa-pause');
+        } else {
+            CalibrationModal.videoEl.pause();
+            $('#calib-pause-icon').attr('class', 'fas fa-play');
+        }
     },
 
     setMark: function(markName) {
-        CalibrationModal.marks[markName] = CalibrationModal.currentPositionSec;
-        $('#mark-val-' + markName).text(CalibrationModal.secondsToTime(CalibrationModal.currentPositionSec) + ' ✓').css('color', '#1DB954');
+        if (!CalibrationModal.videoEl) return;
+        var seconds = Math.floor(CalibrationModal.videoEl.currentTime);
+        CalibrationModal.marks[markName] = seconds;
+        $('#mark-val-' + markName).text(CalibrationModal.secondsToTime(seconds) + ' ✓').css('color', '#1DB954');
     },
 
     saveAll: function() {
@@ -1169,37 +1139,36 @@ var CalibrationModal = {
             var mk = markOrder[i];
             if (CalibrationModal.marks[mk] !== null && CalibrationModal.marks[mk] !== undefined) {
                 pending++;
-                $.ajax({
-                    type: 'POST',
-                    url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-                    data: { action: 'calibrate_set_mark', id: CalibrationModal.sessionId, mark_name: mk, position: CalibrationModal.marks[mk] },
-                    dataType: 'json',
-                    success: function() {
-                        pending--;
-                        if (pending <= 0) {
-                            CalibrationModal.close();
-                            SessionEditor.reload();
+                (function(markName) {
+                    $.ajax({
+                        type: 'POST',
+                        url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'calibrate_set_mark', id: CalibrationModal.sessionId, mark_name: markName, position: CalibrationModal.marks[markName] },
+                        dataType: 'json',
+                        success: function() {
+                            pending--;
+                            if (pending <= 0) {
+                                CalibrationModal.close();
+                                SessionEditor.reload();
+                            }
                         }
-                    }
-                });
+                    });
+                })(mk);
             }
         }
         if (pending == 0) CalibrationModal.close();
     },
 
     close: function() {
-        if (CalibrationModal.pollInterval) {
-            clearInterval(CalibrationModal.pollInterval);
-            CalibrationModal.pollInterval = null;
+        if (CalibrationModal.updateInterval) {
+            clearInterval(CalibrationModal.updateInterval);
+            CalibrationModal.updateInterval = null;
         }
-    },
-
-    timeToSeconds: function(str) {
-        if (!str || str.indexOf('--') !== -1) return 0;
-        str = String(str).replace(/<[^>]*>?/gm, '').trim();
-        var p = str.split(':'), s = 0, m = 1;
-        while (p.length > 0) { s += m * parseInt(p.pop(), 10); m *= 60; }
-        return isNaN(s) ? 0 : s;
+        if (CalibrationModal.videoEl) {
+            CalibrationModal.videoEl.pause();
+            CalibrationModal.videoEl.src = '';
+            CalibrationModal.videoEl = null;
+        }
     },
 
     secondsToTime: function(sec) {
