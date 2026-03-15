@@ -623,28 +623,36 @@ var SessionEditor = {
             html += '      <button class="btn btn-xs btn-warning" onclick="SessionEditor.addPause(\'' + key + '\')"><i class="fas fa-pause"></i> ' + _t('Pause') + '</button>';
             html += '      <button class="btn btn-xs btn-danger" onclick="SessionEditor.addAction(\'' + key + '\')"><i class="fas fa-bolt"></i> ' + _t('Action') + '</button>';
             html += '    </div>';
+
+            // Tops calibrés (uniquement dans la section Film)
+            if (key == 'film') {
+                var filmMarks = (SessionEditor.sessionData.sections.film || {}).marks || {};
+                var markOrder = SessionEditor.marksMeta ? SessionEditor.marksMeta.order : [];
+                var markLabels = SessionEditor.marksMeta ? SessionEditor.marksMeta.labels : {};
+                html += '<div style="margin-top:10px; background:#1a1a1a; border-radius:4px; padding:8px 10px;">';
+                html += '  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">';
+                html += '    <span style="color:#888; font-size:10px; text-transform:uppercase; font-weight:bold;"><i class="fas fa-crosshairs"></i> ' + _t('Tops calibrés') + '</span>';
+                html += '    <button class="btn btn-xs btn-default" onclick="SessionEditor.resetAllMarks()" title="' + _t('Réinitialiser tous les tops') + '"><i class="fas fa-trash"></i> ' + _t('Reset tous') + '</button>';
+                html += '  </div>';
+                for (var mi = 0; mi < markOrder.length; mi++) {
+                    var mk = markOrder[mi];
+                    var val = filmMarks[mk];
+                    var valStr = (val !== null && val !== undefined) ? SessionEditor.ticksToTime(val * 10000000) : '--:--';
+                    var valColor = (val !== null && val !== undefined) ? '#1DB954' : '#555';
+                    html += '<div style="display:flex; align-items:center; gap:8px; padding:3px 0; border-bottom:1px solid #2a2a2a; font-size:11px;">';
+                    html += '  <span style="color:#aaa; flex-grow:1;">' + (markLabels[mk] || mk) + '</span>';
+                    html += '  <span style="color:' + valColor + '; font-family:monospace; min-width:60px;">' + valStr + '</span>';
+                    if (val !== null && val !== undefined) {
+                        html += '  <i class="fas fa-times cursor" style="color:#666; font-size:10px;" onclick="SessionEditor.resetMark(\'' + mk + '\')" title="' + _t('Réinitialiser') + '"></i>';
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
             html += '  </div>';
             html += '</div>';
         }
-
-        // Affichage des marks configurés (section Film)
-        var filmMarks = (SessionEditor.sessionData.sections.film || {}).marks || {};
-        var markOrder = SessionEditor.marksMeta ? SessionEditor.marksMeta.order : [];
-        var markLabels = SessionEditor.marksMeta ? SessionEditor.marksMeta.labels : {};
-        var hasMarks = false;
-        var marksHtml = '<div style="margin-top:10px; background:#1a1a1a; border-radius:4px; padding:8px 10px;">';
-        marksHtml += '<div style="color:#888; font-size:10px; text-transform:uppercase; font-weight:bold; margin-bottom:5px;"><i class="fas fa-crosshairs"></i> ' + _t('Tops calibrés') + '</div>';
-        for (var mi = 0; mi < markOrder.length; mi++) {
-            var mk = markOrder[mi];
-            var val = filmMarks[mk];
-            if (val !== null && val !== undefined) {
-                hasMarks = true;
-                marksHtml += '<span style="display:inline-block; background:#333; color:#1DB954; padding:2px 6px; border-radius:3px; font-size:11px; margin:2px; font-family:monospace;">' + (markLabels[mk] || mk) + ' ' + SessionEditor.ticksToTime(val * 10000000) + '</span>';
-            }
-        }
-        if (!hasMarks) marksHtml += '<span style="color:#555; font-size:11px;">' + _t('Aucun top configuré') + '</span>';
-        marksHtml += '</div>';
-        html += marksHtml;
 
         html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
         html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale estimée') + ' : <strong style="color:#fff;" id="session-total-duration">' + SessionEditor.calculateTotalDuration() + '</strong></span>';
@@ -1040,6 +1048,24 @@ var SessionEditor = {
                     SessionEditor.pollStatus();
                 }
             }
+        });
+    },
+
+    resetMark: function(markName) {
+        if (!SessionEditor.sessionData || !SessionEditor.sessionData.sections || !SessionEditor.sessionData.sections.film) return;
+        SessionEditor.sessionData.sections.film.marks[markName] = null;
+        SessionEditor.save(function() { SessionEditor.reload(); });
+    },
+
+    resetAllMarks: function() {
+        if (!SessionEditor.sessionData || !SessionEditor.sessionData.sections || !SessionEditor.sessionData.sections.film) return;
+        bootbox.confirm(_t('Réinitialiser tous les tops du film ?'), function(ok) {
+            if (!ok) return;
+            var markOrder = SessionEditor.marksMeta ? SessionEditor.marksMeta.order : [];
+            for (var i = 0; i < markOrder.length; i++) {
+                SessionEditor.sessionData.sections.film.marks[markOrder[i]] = null;
+            }
+            SessionEditor.save(function() { SessionEditor.reload(); });
         });
     },
 
