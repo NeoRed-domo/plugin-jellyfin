@@ -1192,7 +1192,7 @@ public function remoteControl($commandName, $_options = null) {
      * Skip le trigger courant et passe au suivant (média ou non-média)
      */
     private static function skipToNextTrigger($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $config) {
-        $sections = $sessionData['sections'] ?? [];
+        $sessionType = $sessionEq->getConfiguration('session_type');
         $currentSection = $engineState['current_section'];
         $triggerIndex = $engineState['current_trigger_index'];
 
@@ -1204,7 +1204,31 @@ public function remoteControl($commandName, $_options = null) {
         unset($engineState['last_position_ticks']);
 
         // Chercher le prochain média
-        $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
+        $next = null;
+        if ($sessionType == 'commercial') {
+            // Commercial : chercher dans la playlist (avec support boucle)
+            $playlist = $sessionData['playlist'] ?? [];
+            $loop = $sessionData['loop'] ?? true;
+            for ($i = $triggerIndex + 1; $i < count($playlist); $i++) {
+                if ($playlist[$i]['type'] == 'media' && (!isset($playlist[$i]['enabled']) || $playlist[$i]['enabled'] !== false)) {
+                    $next = ['trigger' => $playlist[$i], 'section' => 'playlist', 'index' => $i];
+                    break;
+                }
+            }
+            // Boucle : retourner au début
+            if (!$next && $loop && count($playlist) > 0) {
+                for ($i = 0; $i < count($playlist); $i++) {
+                    if ($playlist[$i]['type'] == 'media' && (!isset($playlist[$i]['enabled']) || $playlist[$i]['enabled'] !== false)) {
+                        $next = ['trigger' => $playlist[$i], 'section' => 'playlist', 'index' => $i];
+                        break;
+                    }
+                }
+                if ($next) log::add('jellyfin', 'info', 'Commercial: boucle, retour au début');
+            }
+        } else {
+            $sections = $sessionData['sections'] ?? [];
+            $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
+        }
         if ($next) {
             $previousSection = $engineState['current_section'];
             self::transitionTo($sessionEq, $engineState, $next, $previousSection);
@@ -1497,9 +1521,16 @@ public function remoteControl($commandName, $_options = null) {
     }
 
     private static function executeNonMediaTriggers($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey) {
+        $sessionType = $sessionEq->getConfiguration('session_type');
         $section = $engineState['current_section'];
-        $triggers = $sessionData['sections'][$section]['triggers'] ?? [];
         $config = self::getBaseConfig();
+
+        // Résoudre les triggers selon le type de séance
+        if ($sessionType == 'commercial') {
+            $triggers = $sessionData['playlist'] ?? [];
+        } else {
+            $triggers = $sessionData['sections'][$section]['triggers'] ?? [];
+        }
 
         while ($engineState['current_trigger_index'] < count($triggers)) {
             $trigger = $triggers[$engineState['current_trigger_index']];
@@ -1512,15 +1543,31 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
-                // Collecter ce média + tous les suivants pour un seul PlayNow (playlist Jellyfin)
-                $allMediaIds = [$trigger['media_id']];
-                $sections = $sessionData['sections'] ?? [];
-                $remaining = self::collectAllRemainingMediaIds($sections, $engineState['current_section'], $engineState['current_trigger_index']);
-                $allMediaIds = array_merge($allMediaIds, $remaining);
-                self::playMediaPlaylist($playerEq, $allMediaIds, $config);
+
+                if ($sessionType == 'commercial') {
+                    // Commercial : envoyer toute la playlist restante
+                    $allMediaIds = [$trigger['media_id']];
+                    $playlist = $sessionData['playlist'] ?? [];
+                    for ($i = $engineState['current_trigger_index'] + 1; $i < count($playlist); $i++) {
+                        if ($playlist[$i]['type'] == 'media' && (!isset($playlist[$i]['enabled']) || $playlist[$i]['enabled'] !== false)) {
+                            $allMediaIds[] = $playlist[$i]['media_id'];
+                        }
+                    }
+                    self::playMediaPlaylist($playerEq, $allMediaIds, $config);
+                    $engineState['queued'] = (count($allMediaIds) > 1);
+                    log::add('jellyfin', 'info', 'Commercial PlayNow: ' . count($allMediaIds) . ' médias');
+                } else {
+                    // Cinéma : envoyer ce média + les suivants cross-sections
+                    $allMediaIds = [$trigger['media_id']];
+                    $sections = $sessionData['sections'] ?? [];
+                    $remaining = self::collectAllRemainingMediaIds($sections, $engineState['current_section'], $engineState['current_trigger_index']);
+                    $allMediaIds = array_merge($allMediaIds, $remaining);
+                    self::playMediaPlaylist($playerEq, $allMediaIds, $config);
+                    $engineState['queued'] = (count($allMediaIds) > 1);
+                    log::add('jellyfin', 'info', 'PlayNow playlist: ' . count($allMediaIds) . ' médias (premier: ' . $trigger['media_id'] . ')');
+                }
+
                 $engineState['media_launch_at'] = time();
-                $engineState['queued'] = (count($allMediaIds) > 1);
-                log::add('jellyfin', 'info', 'PlayNow playlist: ' . count($allMediaIds) . ' médias (premier: ' . $trigger['media_id'] . ')');
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
