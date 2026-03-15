@@ -1026,27 +1026,17 @@ public function remoteControl($commandName, $_options = null) {
         // Condition : status Stopped + currentMediaId set + PAS de lancement en attente
         $launchAt = $engineState['media_launch_at'] ?? 0;
         if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
-            $wasQueued = $engineState['queued'] ?? false;
-
-            if ($wasQueued) {
-                // Le prochain clip est dans la queue Jellyfin — attendre l'auto-avancement
-                if (!isset($engineState['stopped_since'])) {
-                    $engineState['stopped_since'] = $now;
-                    log::add('jellyfin', 'debug', 'Média terminé, attente auto-avancement Jellyfin (queue active): ' . $currentMediaId);
-                    cache::set($cacheKey, json_encode($engineState));
-                    return;
-                }
-                if ($now - $engineState['stopped_since'] < self::QUEUE_GRACE_PERIOD) {
-                    // Patience — Jellyfin va auto-avancer
-                    cache::set($cacheKey, json_encode($engineState));
-                    return;
-                }
-                // Grace period dépassée — Jellyfin n'a pas auto-avancé, fallback
-                log::add('jellyfin', 'warning', 'Auto-avancement Jellyfin échoué après ' . self::QUEUE_GRACE_PERIOD . 's, fallback playMedia');
-            } else {
-                log::add('jellyfin', 'debug', 'Média terminé, pas de queue, fallback immédiat: ' . $currentMediaId);
+            // Si playlist active (queued=true), Jellyfin devrait auto-avancer.
+            // On attend 1 tick (0.5s) pour laisser le daemon détecter le nouveau clip.
+            // Si au tick suivant on voit un nouveau clip jouer (resync dans STATE 2), c'est bon.
+            // Sinon on fallback via playMedia.
+            if (!isset($engineState['stopped_since'])) {
+                $engineState['stopped_since'] = $now;
+                cache::set($cacheKey, json_encode($engineState));
+                return; // Attendre 1 tick
             }
-
+            // Déjà attendu au moins 1 tick — fallback
+            log::add('jellyfin', 'debug', 'Média terminé, fallback: ' . $currentMediaId);
             unset($engineState['stopped_since']);
             unset($engineState['stuck_since']);
             unset($engineState['last_position_ticks']);
@@ -1369,6 +1359,59 @@ public function remoteControl($commandName, $_options = null) {
         return null;
     }
 
+    /**
+     * Collecter tous les media_id restants après la position courante.
+     */
+    private static function collectAllRemainingMediaIds($sections, $currentSection, $currentIndex) {
+        $mediaIds = [];
+        $sectionOrder = self::SECTION_ORDER;
+        $sectionIdx = array_search($currentSection, $sectionOrder);
+
+        $triggers = $sections[$currentSection]['triggers'] ?? [];
+        for ($i = $currentIndex + 1; $i < count($triggers); $i++) {
+            if ($triggers[$i]['type'] == 'media' && (!isset($triggers[$i]['enabled']) || $triggers[$i]['enabled'] !== false)) {
+                $mediaIds[] = $triggers[$i]['media_id'];
+            }
+        }
+
+        for ($s = $sectionIdx + 1; $s < count($sectionOrder); $s++) {
+            $secKey = $sectionOrder[$s];
+            foreach ($sections[$secKey]['triggers'] ?? [] as $trigger) {
+                if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
+                    $mediaIds[] = $trigger['media_id'];
+                }
+            }
+        }
+        return $mediaIds;
+    }
+
+    /**
+     * Lancer une playlist de médias via un seul PlayNow avec ItemIds multiples.
+     * Jellyfin crée une playlist interne et auto-avance entre les clips.
+     */
+    private static function playMediaPlaylist($playerEq, $mediaIds, $config) {
+        $deviceId = $playerEq->getConfiguration('device_id');
+        $sessionData = self::getSessionDataFromDeviceId($config['baseUrl'], $config['apikey'], $deviceId);
+        if (!$sessionData || !isset($sessionData['Id'])) {
+            log::add('jellyfin', 'error', 'playMediaPlaylist: session Jellyfin introuvable');
+            return false;
+        }
+        $sessionId = $sessionData['Id'];
+
+        // Stopper le lecteur d'abord (fix Android TV)
+        if (isset($sessionData['NowPlayingItem'])) {
+            $stopUrl = $config['baseUrl'] . '/Sessions/' . $sessionId . '/Playing/Stop?api_key=' . $config['apikey'];
+            self::requestApi($stopUrl, 'POST', null, false, 2);
+            usleep(300000);
+        }
+
+        $ids = implode(',', $mediaIds);
+        $url = $config['baseUrl'] . '/Sessions/' . $sessionId . '/Playing?ItemIds=' . $ids . '&PlayCommand=PlayNow&StartPositionTicks=0&api_key=' . $config['apikey'];
+        self::requestApi($url, 'POST', null, false, 2);
+        log::add('jellyfin', 'debug', 'PlayNow playlist (' . count($mediaIds) . ' items): ' . $ids);
+        return true;
+    }
+
     private static function queueMediaDirect($jellyfinSessionId, $mediaId, $config) {
         if (!$jellyfinSessionId) return;
         $url = $config['baseUrl'] . '/Sessions/' . $jellyfinSessionId . '/Queue?ItemIds=' . $mediaId . '&Mode=PlayNext&api_key=' . $config['apikey'];
@@ -1446,9 +1489,15 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
-                $playerEq->playMedia($trigger['media_id'], 'play_now');
+                // Collecter ce média + tous les suivants pour un seul PlayNow (playlist Jellyfin)
+                $allMediaIds = [$trigger['media_id']];
+                $sections = $sessionData['sections'] ?? [];
+                $remaining = self::collectAllRemainingMediaIds($sections, $engineState['current_section'], $engineState['current_trigger_index']);
+                $allMediaIds = array_merge($allMediaIds, $remaining);
+                self::playMediaPlaylist($playerEq, $allMediaIds, $config);
                 $engineState['media_launch_at'] = time();
-                $engineState['queued'] = false;
+                $engineState['queued'] = (count($allMediaIds) > 1);
+                log::add('jellyfin', 'info', 'PlayNow playlist: ' . count($allMediaIds) . ' médias (premier: ' . $trigger['media_id'] . ')');
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
