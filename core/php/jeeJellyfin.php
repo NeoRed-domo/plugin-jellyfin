@@ -29,6 +29,11 @@ try {
         throw new Exception("La méthode jellyfin::processSessions n'existe pas !");
     }
 
+    // 3b. Moteur d'exécution des séances
+    if (class_exists('jellyfin') && method_exists('jellyfin', 'tickSessionEngine')) {
+        jellyfin::tickSessionEngine($payload);
+    }
+
     // 4. Réponse OK pour le Python
     echo "OK";
 
