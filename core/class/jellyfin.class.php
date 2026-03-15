@@ -1065,6 +1065,17 @@ public function remoteControl($commandName, $_options = null) {
             unset($engineState['launch_retries']);
             unset($engineState['stopped_since']);
 
+            // Queue le prochain média dès que le clip est confirmé en lecture
+            if ($status == 'Playing' && !($engineState['queued'] ?? false) && $jellyfinSessionId) {
+                $next = self::findNextMediaTrigger($sections, $engineState['current_section'], $engineState['current_trigger_index']);
+                if ($next) {
+                    self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
+                    $engineState['queued'] = true;
+                    $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
+                    log::add('jellyfin', 'info', 'Queue confirmé (clip en lecture): ' . $next['trigger']['media_id']);
+                }
+            }
+
             // Resync si le lecteur joue un média inattendu
             if ($status == 'Playing' && !empty($itemId) && !empty($currentMediaId) && $itemId != $currentMediaId) {
                 $found = self::findTriggerByMediaId($sections, $itemId);
@@ -1199,11 +1210,8 @@ public function remoteControl($commandName, $_options = null) {
             }
 
             $engineState['media_launch_at'] = time();
+            $engineState['queued'] = false; // Le queue sera fait quand le clip joue réellement
             log::add('jellyfin', 'info', 'Lancement: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . '[' . $next['index'] . '])');
-
-            // Queue immédiat du prochain média pour enchaînement fluide
-            self::queueNextMediaAfterCurrent($playerEq, $sessionData, $engineState, $config);
-
             cache::set($cacheKey, json_encode($engineState));
         } else {
             log::add('jellyfin', 'info', 'Plus de médias à jouer. Fin de séance.');
@@ -1405,8 +1413,7 @@ public function remoteControl($commandName, $_options = null) {
                 $engineState['current_media_id'] = $trigger['media_id'];
                 $playerEq->playMedia($trigger['media_id'], 'play_now');
                 $engineState['media_launch_at'] = time();
-                // Queue immédiat du prochain média
-                self::queueNextMediaAfterCurrent($playerEq, $sessionData, $engineState, $config);
+                $engineState['queued'] = false;
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
