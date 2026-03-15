@@ -691,14 +691,23 @@ public function remoteControl($commandName, $_options = null) {
         $missing = $this->validateSessionMedia($config);
         if (!empty($missing)) return ['error' => __('Médias introuvables: ', __FILE__) . implode(', ', $missing)];
 
-        // Arrêter séance existante sur ce lecteur
-        $existingState = cache::byKey('jellyfin::active_session::' . $playerId)->getValue(null);
+        // Arrêter séance existante sur ce lecteur + forcer nettoyage cache
+        $cacheKey = 'jellyfin::active_session::' . $playerId;
+        $existingState = cache::byKey($cacheKey)->getValue(null);
         if ($existingState !== null) {
             $existingData = json_decode($existingState, true);
             if (isset($existingData['session_eqlogic_id'])) {
                 $existingSession = self::byId($existingData['session_eqlogic_id']);
                 if (is_object($existingSession)) $existingSession->stopSession();
             }
+            cache::set($cacheKey, null); // Force nettoyage
+        }
+
+        // Stopper le lecteur pour partir d'un état propre
+        if ($playerSession && isset($playerSession['Id'])) {
+            $stopUrl = $config['baseUrl'] . '/Sessions/' . $playerSession['Id'] . '/Playing/Stop?api_key=' . $config['apikey'];
+            self::requestApi($stopUrl, 'POST');
+            usleep(500000); // 500ms pour laisser le lecteur se stabiliser
         }
 
         // Initialiser état moteur
@@ -1039,7 +1048,7 @@ public function remoteControl($commandName, $_options = null) {
                 $engineState['launch_retries'] = $retries + 1;
                 $engineState['media_launch_at'] = $now;
                 log::add('jellyfin', 'warning', 'Média ne démarre pas, retry ' . ($retries + 1) . '/' . self::MAX_LAUNCH_RETRIES . ': ' . $currentMediaId);
-                self::playMediaDirect($playerEq, $currentMediaId, $config);
+                $playerEq->playMedia($currentMediaId, 'play_now');
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
@@ -1180,9 +1189,9 @@ public function remoteControl($commandName, $_options = null) {
             // Exécuter les non-média entre l'ancien index et le nouveau
             // (si même section et triggers intermédiaires)
             // Pour simplifier : on lance directement le média trouvé
-            $launched = self::playMediaDirect($playerEq, $next['trigger']['media_id'], $config);
-            if (!$launched) {
-                log::add('jellyfin', 'error', 'playMediaDirect a échoué pour: ' . $next['trigger']['media_id'] . '. Skip.');
+            $launched = $playerEq->playMedia($next['trigger']['media_id'], 'play_now');
+            if (isset($launched['error'])) {
+                log::add('jellyfin', 'error', 'playMedia a échoué pour: ' . $next['trigger']['media_id'] . ' — ' . $launched['error']);
                 // Récursion sécurisée (max depth via retries)
                 $engineState['launch_retries'] = ($engineState['launch_retries'] ?? 0) + 1;
                 if (($engineState['launch_retries'] ?? 0) <= self::MAX_LAUNCH_RETRIES) {
@@ -1347,7 +1356,7 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
-                if ($config) self::playMediaDirect($playerEq, $trigger['media_id'], $config);
+                $playerEq->playMedia($trigger['media_id'], 'play_now');
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
