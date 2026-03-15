@@ -627,16 +627,56 @@ var SessionEditor = {
             html += '</div>';
         }
 
+        // Affichage des marks configurés (section Film)
+        var filmMarks = (SessionEditor.sessionData.sections.film || {}).marks || {};
+        var markOrder = SessionEditor.marksMeta ? SessionEditor.marksMeta.order : [];
+        var markLabels = SessionEditor.marksMeta ? SessionEditor.marksMeta.labels : {};
+        var hasMarks = false;
+        var marksHtml = '<div style="margin-top:10px; background:#1a1a1a; border-radius:4px; padding:8px 10px;">';
+        marksHtml += '<div style="color:#888; font-size:10px; text-transform:uppercase; font-weight:bold; margin-bottom:5px;"><i class="fas fa-crosshairs"></i> ' + _t('Tops calibrés') + '</div>';
+        for (var mi = 0; mi < markOrder.length; mi++) {
+            var mk = markOrder[mi];
+            var val = filmMarks[mk];
+            if (val !== null && val !== undefined) {
+                hasMarks = true;
+                marksHtml += '<span style="display:inline-block; background:#333; color:#1DB954; padding:2px 6px; border-radius:3px; font-size:11px; margin:2px; font-family:monospace;">' + (markLabels[mk] || mk) + ' ' + SessionEditor.ticksToTime(val * 10000000) + '</span>';
+            }
+        }
+        if (!hasMarks) marksHtml += '<span style="color:#555; font-size:11px;">' + _t('Aucun top configuré') + '</span>';
+        marksHtml += '</div>';
+        html += marksHtml;
+
         html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
         html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale estimée') + ' : <strong style="color:#fff;" id="session-total-duration">' + SessionEditor.calculateTotalDuration() + '</strong></span>';
         html += '  <div style="display:flex; gap:6px;">';
         html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
+        html += '    <button class="btn btn-sm btn-danger" onclick="SessionEditor.stopSession()" style="display:none;" id="session-stop-btn"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>';
         html += '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.openFromEditor()"><i class="fas fa-crosshairs"></i> ' + _t('Calibrer tops') + '</button>';
         html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.refreshDurations()"><i class="fas fa-sync"></i> ' + _t('Rafraîchir durées') + '</button>';
         html += '  </div>';
         html += '</div>';
 
+        // Panneau monitoring live
+        html += '<div id="session-monitor" style="margin-top:10px; padding:12px; background:#111; border:1px solid #333; border-radius:4px; display:none;">';
+        html += '  <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">';
+        html += '    <span style="color:#1DB954; font-weight:bold; font-size:13px;"><i class="fas fa-broadcast-tower"></i> ' + _t('Séance en cours') + '</span>';
+        html += '    <span id="monitor-state" style="font-size:11px; padding:2px 8px; border-radius:3px; background:#333; color:#aaa;"></span>';
+        html += '  </div>';
+        html += '  <div style="display:flex; gap:15px; flex-wrap:wrap; font-size:12px; color:#ccc;">';
+        html += '    <div><i class="fas fa-list" style="color:#888;"></i> ' + _t('Section') + ': <strong id="monitor-section">-</strong></div>';
+        html += '    <div><i class="fas fa-film" style="color:#888;"></i> ' + _t('Média') + ': <strong id="monitor-title">-</strong></div>';
+        html += '    <div><i class="fas fa-clock" style="color:#888;"></i> <strong id="monitor-position">--:--</strong> / <span id="monitor-duration">--:--</span></div>';
+        html += '    <div><i class="fas fa-tasks" style="color:#888;"></i> ' + _t('Progression') + ': <strong id="monitor-progress">0</strong>%</div>';
+        html += '  </div>';
+        html += '  <div style="margin-top:8px; height:4px; background:#333; border-radius:2px;">';
+        html += '    <div id="monitor-progress-bar" style="height:100%; background:#1DB954; border-radius:2px; width:0%; transition:width 0.5s;"></div>';
+        html += '  </div>';
+        html += '</div>';
+
         $('#session-editor-container').html(html);
+
+        // Démarrer le polling monitoring
+        SessionEditor.startMonitoring();
     },
 
     renderCommercial: function() {
@@ -905,6 +945,79 @@ var SessionEditor = {
 
     reload: function() {
         SessionEditor.load(SessionEditor.eqLogicId);
+    },
+
+    _monitorInterval: null,
+
+    startMonitoring: function() {
+        SessionEditor.stopMonitoring();
+        SessionEditor.pollStatus();
+        SessionEditor._monitorInterval = setInterval(SessionEditor.pollStatus, 2000);
+    },
+
+    stopMonitoring: function() {
+        if (SessionEditor._monitorInterval) {
+            clearInterval(SessionEditor._monitorInterval);
+            SessionEditor._monitorInterval = null;
+        }
+    },
+
+    pollStatus: function() {
+        if (!SessionEditor.eqLogicId) return;
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'get_session_status', id: SessionEditor.eqLogicId },
+            dataType: 'json',
+            global: false,
+            success: function(data) {
+                if (data.state != 'ok') return;
+                var r = data.result;
+                var $monitor = $('#session-monitor');
+                if (r.state == 'playing' || r.state == 'paused') {
+                    $monitor.show();
+                    $('#session-stop-btn').show();
+                    var stateColor = r.state == 'playing' ? '#1DB954' : '#f39c12';
+                    var stateLabel = r.state == 'playing' ? 'Playing' : 'Paused';
+                    $('#monitor-state').text(stateLabel).css({ background: stateColor, color: '#fff' });
+                    $('#monitor-section').text(r.current_section || '-');
+                    $('#monitor-progress').text(r.progress || 0);
+                    $('#monitor-progress-bar').css('width', (r.progress || 0) + '%');
+                    if (r.player) {
+                        $('#monitor-title').text(r.player.title || '-');
+                        $('#monitor-position').text(r.player.position || '--:--');
+                        $('#monitor-duration').text(r.player.duration || '--:--');
+                    }
+                    if (r.engine_state) {
+                        var es = r.engine_state;
+                        var debugParts = [];
+                        if (es.current_section) debugParts.push('sec:' + es.current_section);
+                        if (es.current_trigger_index !== undefined) debugParts.push('idx:' + es.current_trigger_index);
+                        if (es.current_media_id) debugParts.push('media:' + es.current_media_id.substring(0, 8) + '...');
+                        if (es.queued) debugParts.push('queued');
+                        if (es.stopped_since) debugParts.push('stopped_since:' + es.stopped_since);
+                    }
+                } else {
+                    $monitor.hide();
+                    $('#session-stop-btn').hide();
+                }
+            }
+        });
+    },
+
+    stopSession: function() {
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'stop_session', id: SessionEditor.eqLogicId },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state == 'ok') {
+                    $('#div_alert').showAlert({ message: _t('Séance arrêtée'), level: 'success' });
+                    SessionEditor.pollStatus();
+                }
+            }
+        });
     },
 
     refreshDurations: function() {

@@ -991,22 +991,31 @@ public function remoteControl($commandName, $_options = null) {
                 }
             }
 
-            // Fallback timeout
+            // Fallback timeout — média terminé, passer au suivant
             $fallbackTimeout = (float)config::byKey('fallback_timeout', 'jellyfin', 5);
             if ($status == 'Stopped' && !empty($currentMediaId)) {
                 if (!isset($engineState['stopped_since'])) {
                     $engineState['stopped_since'] = time();
                 } elseif (time() - $engineState['stopped_since'] >= $fallbackTimeout) {
                     unset($engineState['stopped_since']);
-                    $nextTrigger = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
-                    if ($nextTrigger) {
-                        self::playMediaDirect($playerEq, $nextTrigger['media_id'], $config);
-                        $engineState['current_trigger_index'] = $triggerIndex + 1;
-                        $engineState['current_media_id'] = $nextTrigger['media_id'];
+                    $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
+                    if ($next) {
+                        // Mettre à jour section + index vers la position réelle du prochain média
+                        $engineState['current_section'] = $next['section'];
+                        $engineState['current_trigger_index'] = $next['index'];
+                        $engineState['current_media_id'] = $next['trigger']['media_id'];
                         $engineState['queued'] = false;
-                        log::add('jellyfin', 'warning', 'Fallback PlayNow: ' . $nextTrigger['media_id']);
+                        // Ambiance si changement de section
+                        if ($next['section'] != $currentSection) {
+                            self::triggerLighting($sessionEq->getSessionLighting($next['section']));
+                            $engineState['current_lighting'] = $next['section'];
+                            $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$next['section']] ?? $next['section']);
+                        }
+                        self::playMediaDirect($playerEq, $next['trigger']['media_id'], $config);
+                        log::add('jellyfin', 'warning', 'Fallback PlayNow: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . ')');
                     } else {
-                        self::advanceToNextSection($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey);
+                        // Plus rien à jouer
+                        $sessionEq->stopSession();
                         return;
                     }
                 }
@@ -1020,19 +1029,25 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($runTimeTicks > 0 && $status == 'Playing') {
                 $remainingSeconds = ($runTimeTicks - $positionTicks) / 10000000;
-                $nextTrigger = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
+                $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
 
-                if ($nextTrigger && !($engineState['queued'] ?? false) && $remainingSeconds <= $queueAnticipation && $remainingSeconds > $nextAnticipation) {
-                    self::queueMediaDirect($jellyfinSessionId, $nextTrigger['media_id'], $config);
-                    $engineState['expected_next_media_id'] = $nextTrigger['media_id'];
+                if ($next && !($engineState['queued'] ?? false) && $remainingSeconds <= $queueAnticipation && $remainingSeconds > $nextAnticipation) {
+                    self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
+                    $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
                     $engineState['queued'] = true;
                 }
 
-                if ($nextTrigger && $remainingSeconds <= $nextAnticipation) {
+                if ($next && $remainingSeconds <= $nextAnticipation) {
                     self::sendNextTrackDirect($jellyfinSessionId, $config);
-                    $engineState['current_trigger_index'] = $triggerIndex + 1;
-                    $engineState['current_media_id'] = $nextTrigger['media_id'];
+                    $engineState['current_section'] = $next['section'];
+                    $engineState['current_trigger_index'] = $next['index'];
+                    $engineState['current_media_id'] = $next['trigger']['media_id'];
                     $engineState['queued'] = false;
+                    if ($next['section'] != $currentSection) {
+                        self::triggerLighting($sessionEq->getSessionLighting($next['section']));
+                        $engineState['current_lighting'] = $next['section'];
+                        $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$next['section']] ?? $next['section']);
+                    }
                 }
             }
 
@@ -1115,13 +1130,17 @@ public function remoteControl($commandName, $_options = null) {
 
         $triggers = $sections[$currentSection]['triggers'] ?? [];
         for ($i = $currentIndex + 1; $i < count($triggers); $i++) {
-            if ($triggers[$i]['type'] == 'media' && (!isset($triggers[$i]['enabled']) || $triggers[$i]['enabled'] !== false)) return $triggers[$i];
+            if ($triggers[$i]['type'] == 'media' && (!isset($triggers[$i]['enabled']) || $triggers[$i]['enabled'] !== false)) {
+                return ['trigger' => $triggers[$i], 'section' => $currentSection, 'index' => $i];
+            }
         }
 
         for ($s = $sectionIdx + 1; $s < count($sectionOrder); $s++) {
             $secKey = $sectionOrder[$s];
-            foreach ($sections[$secKey]['triggers'] ?? [] as $trigger) {
-                if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) return $trigger;
+            foreach ($sections[$secKey]['triggers'] ?? [] as $idx => $trigger) {
+                if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
+                    return ['trigger' => $trigger, 'section' => $secKey, 'index' => $idx];
+                }
             }
         }
         return null;

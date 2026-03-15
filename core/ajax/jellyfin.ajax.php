@@ -348,6 +348,50 @@ if (init('action') == 'add') {
         ajax::success(['stream_url' => $streamUrl]);
     }
 
+    if (init('action') == 'get_session_status') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        $sessionData = $eqLogic->getConfiguration('session_data');
+        $playerId = $sessionData['player_id'] ?? null;
+        $engineState = null;
+        if ($playerId) {
+            $raw = cache::byKey('jellyfin::active_session::' . $playerId)->getValue(null);
+            if ($raw) $engineState = json_decode($raw, true);
+        }
+        // Lire les commandes
+        $stateCmd = $eqLogic->getCmd('info', 'state');
+        $sectionCmd = $eqLogic->getCmd('info', 'current_section');
+        $progressCmd = $eqLogic->getCmd('info', 'progress');
+
+        $result = [
+            'state' => is_object($stateCmd) ? $stateCmd->execCmd() : 'stopped',
+            'current_section' => is_object($sectionCmd) ? $sectionCmd->execCmd() : '',
+            'progress' => is_object($progressCmd) ? $progressCmd->execCmd() : 0,
+            'engine_state' => $engineState
+        ];
+
+        // Infos lecteur si en cours
+        if ($engineState && $playerId) {
+            $player = jellyfin::byId($playerId);
+            if (is_object($player)) {
+                $posCmd = $player->getCmd('info', 'position');
+                $durCmd = $player->getCmd('info', 'duration');
+                $titleCmd = $player->getCmd('info', 'title');
+                $statusCmd = $player->getCmd('info', 'status');
+                $result['player'] = [
+                    'name' => $player->getName(),
+                    'position' => is_object($posCmd) ? $posCmd->execCmd() : '--:--',
+                    'duration' => is_object($durCmd) ? $durCmd->execCmd() : '--:--',
+                    'title' => is_object($titleCmd) ? $titleCmd->execCmd() : '',
+                    'status' => is_object($statusCmd) ? $statusCmd->execCmd() : 'Stopped'
+                ];
+            }
+        }
+        ajax::success($result);
+    }
+
     if (init('action') == 'refresh_session_durations') {
         $eqLogic = jellyfin::byId(init('id'));
         if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
