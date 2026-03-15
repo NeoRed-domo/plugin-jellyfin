@@ -329,17 +329,18 @@ var JellyfinBrowser = {
             } else {
                 var imgContent = `<img src="${imageUrl}" loading="lazy" onerror="this.onerror=null;this.parentNode.innerHTML='<i class=\\'fas fa-film\\' style=\\'font-size:40px;color:#555;\\'></i>';">`;
                 // MODIF : Passage des arguments videoRes et audioInfo
-                cardHtml = `<div class="jelly-card jelly-media" id="card-${item.Id}" onclick="JellyfinBrowser.selectMedia('${item.Id}', '${title.replace(/'/g, "\\'")}', '${imgTag}', '${year}', '${rating}', '${overview}', '${imageUrl}', '${duration}', '${videoRes}', '${audioInfo}')"><div class="jelly-img-container">${imgContent}</div><div class="jelly-title">${title}</div></div>`;
+                var runTimeTicks = item.RunTimeTicks || 0;
+                cardHtml = `<div class="jelly-card jelly-media" id="card-${item.Id}" onclick="JellyfinBrowser.selectMedia('${item.Id}', '${title.replace(/'/g, "\\'")}', '${imgTag}', '${year}', '${rating}', '${overview}', '${imageUrl}', '${duration}', '${videoRes}', '${audioInfo}', ${runTimeTicks})"><div class="jelly-img-container">${imgContent}</div><div class="jelly-title">${title}</div></div>`;
             }
             container.append(cardHtml);
         });
     },
 
     // MODIF : Ajout des arguments videoRes et audioInfo
-    selectMedia: function (itemId, title, imgTag, year, rating, overview, imgUrl, duration, videoRes, audioInfo) {
+    selectMedia: function (itemId, title, imgTag, year, rating, overview, imgUrl, duration, videoRes, audioInfo, runTimeTicks) {
         $('.jelly-card').removeClass('selected');
         $('#card-' + itemId).addClass('selected');
-        JellyfinBrowser.selectedItem = {Id: itemId, Name: title, ImgTag: imgTag};
+        JellyfinBrowser.selectedItem = {Id: itemId, Name: title, ImgTag: imgTag, RunTimeTicks: runTimeTicks || 0};
         
         $('#sel-title').text(title);
         $('#sel-year').text(year ? year : '');
