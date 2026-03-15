@@ -1094,25 +1094,20 @@ public function remoteControl($commandName, $_options = null) {
                 $engineState['last_position_ticks'] = $positionTicks;
             }
 
-            // Pré-chargement + NextTrack anticipé
-            $queueAnticipation = (float)config::byKey('queue_anticipation', 'jellyfin', 2);
+            // NextTrack anticipé — envoie Next avant la fin pour transition sans coupure
+            // Le queue a déjà été fait au lancement du clip courant
             $nextAnticipation = (float)config::byKey('next_anticipation', 'jellyfin', 0.5);
 
-            if ($runTimeTicks > 0 && $status == 'Playing') {
+            if ($runTimeTicks > 0 && $status == 'Playing' && ($engineState['queued'] ?? false)) {
                 $remainingSeconds = ($runTimeTicks - $positionTicks) / 10000000;
-                $next = self::findNextMediaTrigger($sections, $engineState['current_section'], $engineState['current_trigger_index']);
 
-                if ($next && !($engineState['queued'] ?? false) && $remainingSeconds <= $queueAnticipation && $remainingSeconds > $nextAnticipation) {
-                    self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
-                    $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
-                    $engineState['queued'] = true;
-                    log::add('jellyfin', 'debug', 'Queue anticipé: ' . $next['trigger']['media_id']);
-                }
-
-                if ($next && $remainingSeconds <= $nextAnticipation) {
-                    self::sendNextTrackDirect($jellyfinSessionId, $config);
-                    self::transitionTo($sessionEq, $engineState, $next, $currentSection);
-                    log::add('jellyfin', 'debug', 'NextTrack anticipé → ' . $next['trigger']['media_id']);
+                if ($remainingSeconds <= $nextAnticipation && $remainingSeconds > 0) {
+                    $next = self::findNextMediaTrigger($sections, $engineState['current_section'], $engineState['current_trigger_index']);
+                    if ($next) {
+                        self::sendNextTrackDirect($jellyfinSessionId, $config);
+                        self::transitionTo($sessionEq, $engineState, $next, $currentSection);
+                        log::add('jellyfin', 'info', 'NextTrack anticipé → ' . $next['trigger']['media_id'] . ' (transition fluide)');
+                    }
                 }
             }
 
@@ -1205,10 +1200,41 @@ public function remoteControl($commandName, $_options = null) {
 
             $engineState['media_launch_at'] = time();
             log::add('jellyfin', 'info', 'Lancement: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . '[' . $next['index'] . '])');
+
+            // Queue immédiat du prochain média pour enchaînement fluide
+            self::queueNextMediaAfterCurrent($playerEq, $sessionData, $engineState, $config);
+
             cache::set($cacheKey, json_encode($engineState));
         } else {
             log::add('jellyfin', 'info', 'Plus de médias à jouer. Fin de séance.');
             $sessionEq->stopSession();
+        }
+    }
+
+    /**
+     * Queue immédiatement le prochain média après le média courant.
+     * Jellyfin pré-charge le clip suivant → transition quasi-instantanée.
+     */
+    private static function queueNextMediaAfterCurrent($playerEq, $sessionData, &$engineState, $config) {
+        $sections = $sessionData['sections'] ?? [];
+        $currentSection = $engineState['current_section'] ?? '';
+        $currentIndex = $engineState['current_trigger_index'] ?? 0;
+
+        $next = self::findNextMediaTrigger($sections, $currentSection, $currentIndex);
+        if (!$next) return;
+
+        // Résoudre la session Jellyfin pour l'appel Queue
+        $deviceId = $playerEq->getConfiguration('device_id');
+        $jellyfinSession = self::getSessionDataFromDeviceId($config['baseUrl'], $config['apikey'], $deviceId);
+        $jellyfinSessionId = $jellyfinSession['Id'] ?? null;
+
+        if ($jellyfinSessionId) {
+            self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
+            $engineState['queued'] = true;
+            $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
+            log::add('jellyfin', 'info', 'Queue immédiat: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . ')');
+        } else {
+            log::add('jellyfin', 'warning', 'Impossible de queue: session Jellyfin introuvable');
         }
     }
 
@@ -1223,34 +1249,55 @@ public function remoteControl($commandName, $_options = null) {
         $currentMedia = $playlist[$triggerIndex] ?? null;
         if (!$currentMedia) return;
 
-        $queueAnticipation = (float)config::byKey('queue_anticipation', 'jellyfin', 2);
         $nextAnticipation = (float)config::byKey('next_anticipation', 'jellyfin', 0.5);
 
-        if ($runTimeTicks > 0 && $status == 'Playing') {
+        // NextTrack anticipé (le queue a été fait au lancement)
+        if ($runTimeTicks > 0 && $status == 'Playing' && ($engineState['queued'] ?? false)) {
             $remainingSeconds = ($runTimeTicks - $positionTicks) / 10000000;
             $isLast = ($triggerIndex + 1 >= count($playlist));
 
-            if (!($isLast && !$loop)) {
+            if (!($isLast && !$loop) && $remainingSeconds <= $nextAnticipation && $remainingSeconds > 0) {
                 $nextIndex = $isLast ? 0 : $triggerIndex + 1;
                 $nextMedia = $playlist[$nextIndex];
-
-                if (!($engineState['queued'] ?? false) && $remainingSeconds <= $queueAnticipation && $remainingSeconds > $nextAnticipation) {
-                    self::queueMediaDirect($jellyfinSessionId, $nextMedia['media_id'], $config);
-                    $engineState['queued'] = true;
-                }
-
-                if ($remainingSeconds <= $nextAnticipation) {
-                    self::sendNextTrackDirect($jellyfinSessionId, $config);
-                    $engineState['current_trigger_index'] = $nextIndex;
-                    $engineState['current_media_id'] = $nextMedia['media_id'];
-                    $engineState['queued'] = false;
+                self::sendNextTrackDirect($jellyfinSessionId, $config);
+                $engineState['current_trigger_index'] = $nextIndex;
+                $engineState['current_media_id'] = $nextMedia['media_id'];
+                $engineState['queued'] = false;
+                log::add('jellyfin', 'info', 'Commercial NextTrack anticipé → index ' . $nextIndex);
+                // Queue le suivant pour la prochaine transition
+                if ($jellyfinSessionId) {
+                    $nextNextIndex = ($nextIndex + 1 >= count($playlist)) ? ($loop ? 0 : -1) : $nextIndex + 1;
+                    if ($nextNextIndex >= 0 && isset($playlist[$nextNextIndex])) {
+                        self::queueMediaDirect($jellyfinSessionId, $playlist[$nextNextIndex]['media_id'], $config);
+                        $engineState['queued'] = true;
+                    }
                 }
             }
         }
 
-        if ($status == 'Stopped' && ($triggerIndex + 1 >= count($playlist)) && !$loop) {
-            $sessionEq->stopSession();
-            return;
+        // Média terminé sans anticipation (fallback)
+        $currentMediaId = $engineState['current_media_id'] ?? '';
+        if ($status == 'Stopped' && !empty($currentMediaId) && ($engineState['media_launch_at'] ?? 0) == 0) {
+            $isLast = ($triggerIndex + 1 >= count($playlist));
+            if ($isLast && !$loop) {
+                $sessionEq->stopSession();
+                return;
+            }
+            // Lancer le suivant
+            $nextIndex = $isLast ? 0 : $triggerIndex + 1;
+            $nextMedia = $playlist[$nextIndex];
+            $playerEq->playMedia($nextMedia['media_id'], 'play_now');
+            $engineState['current_trigger_index'] = $nextIndex;
+            $engineState['current_media_id'] = $nextMedia['media_id'];
+            $engineState['media_launch_at'] = time();
+            $engineState['queued'] = false;
+            // Queue le suivant
+            $nextNextIndex = ($nextIndex + 1 >= count($playlist)) ? ($loop ? 0 : -1) : $nextIndex + 1;
+            if ($nextNextIndex >= 0 && $jellyfinSessionId && isset($playlist[$nextNextIndex])) {
+                self::queueMediaDirect($jellyfinSessionId, $playlist[$nextNextIndex]['media_id'], $config);
+                $engineState['queued'] = true;
+            }
+            log::add('jellyfin', 'info', 'Commercial fallback → index ' . $nextIndex);
         }
 
         self::updateSessionProgress($sessionEq, $sessionData, $engineState);
@@ -1357,6 +1404,9 @@ public function remoteControl($commandName, $_options = null) {
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
                 $playerEq->playMedia($trigger['media_id'], 'play_now');
+                $engineState['media_launch_at'] = time();
+                // Queue immédiat du prochain média
+                self::queueNextMediaAfterCurrent($playerEq, $sessionData, $engineState, $config);
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
