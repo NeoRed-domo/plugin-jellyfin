@@ -1012,29 +1012,30 @@ public function remoteControl($commandName, $_options = null) {
             return;
         }
 
+        // === ÉTAT 3 (vérifié EN PREMIER) : MÉDIA TERMINÉ → ENCHAÎNER ===
+        // Condition : status Stopped + currentMediaId set + PAS de lancement en attente
+        $launchAt = $engineState['media_launch_at'] ?? 0;
+        if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
+            log::add('jellyfin', 'debug', 'Média terminé, enchaînement immédiat: ' . $currentMediaId);
+            unset($engineState['stopped_since']);
+            unset($engineState['stuck_since']);
+            unset($engineState['last_position_ticks']);
+            self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
+            return;
+        }
+
         // === ÉTAT 1 : ON A LANCÉ UN MÉDIA, IL N'A PAS ENCORE DÉMARRÉ ===
-        if (!empty($currentMediaId) && $status != 'Playing' && $status != 'Paused') {
-            $launchAt = $engineState['media_launch_at'] ?? 0;
+        // Condition : media_launch_at est SET (on a envoyé un PlayNow) + status pas Playing
+        if (!empty($currentMediaId) && $launchAt > 0 && $status != 'Playing' && $status != 'Paused') {
             $retries = $engineState['launch_retries'] ?? 0;
-
-            if ($launchAt == 0) {
-                // Premier tick après lancement — noter le timestamp
-                $engineState['media_launch_at'] = $now;
-                cache::set($cacheKey, json_encode($engineState));
-                return;
-            }
-
             $elapsed = $now - $launchAt;
 
             if ($elapsed < self::LAUNCH_TIMEOUT) {
-                // Patience — le média peut mettre quelques secondes à démarrer
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
 
-            // Timeout de lancement dépassé
             if ($retries < self::MAX_LAUNCH_RETRIES) {
-                // Retry
                 $engineState['launch_retries'] = $retries + 1;
                 $engineState['media_launch_at'] = $now;
                 log::add('jellyfin', 'warning', 'Média ne démarre pas, retry ' . ($retries + 1) . '/' . self::MAX_LAUNCH_RETRIES . ': ' . $currentMediaId);
@@ -1043,7 +1044,6 @@ public function remoteControl($commandName, $_options = null) {
                 return;
             }
 
-            // Max retries atteint — SKIP ce trigger
             log::add('jellyfin', 'error', 'Média en échec après ' . self::MAX_LAUNCH_RETRIES . ' tentatives, SKIP: ' . $currentMediaId);
             self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
             return;
@@ -1131,16 +1131,6 @@ public function remoteControl($commandName, $_options = null) {
             }
         }
 
-        // === ÉTAT 3 : MÉDIA TERMINÉ (Stopped) — ENCHAÎNER IMMÉDIATEMENT ===
-        if ($status == 'Stopped' && !empty($currentMediaId)) {
-            // Pas d'attente : le média est terminé, on enchaîne tout de suite
-            log::add('jellyfin', 'debug', 'Média terminé, enchaînement immédiat: ' . $currentMediaId);
-            unset($engineState['stopped_since']);
-            unset($engineState['media_launch_at']);
-            unset($engineState['launch_retries']);
-            self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
-            return;
-        }
 
         self::updateSessionProgress($sessionEq, $sessionData, $engineState);
         cache::set($cacheKey, json_encode($engineState));
