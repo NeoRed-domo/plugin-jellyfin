@@ -1391,11 +1391,11 @@ public function remoteControl($commandName, $_options = null) {
         }
         $sessionId = $sessionData['Id'];
 
-        // Stopper le lecteur d'abord (fix Android TV)
+        // Stopper le lecteur d'abord si quelque chose joue (fix Android TV)
         if (isset($sessionData['NowPlayingItem'])) {
             $stopUrl = $config['baseUrl'] . '/Sessions/' . $sessionId . '/Playing/Stop?api_key=' . $config['apikey'];
             self::requestApi($stopUrl, 'POST', null, false, 2);
-            usleep(300000);
+            usleep(100000); // 100ms (réduit pour enchaînement rapide)
         }
 
         $ids = implode(',', $mediaIds);

@@ -92,8 +92,8 @@ def main():
     # 3. Initialisation
     write_pid(args.pid)
     
-    # MODIFICATION : Cycle très court pour une haute réactivité de l'interface
-    TARGET_CYCLE = 0.5 
+    # Cycle court pour réactivité de l'interface et enchaînement séances
+    TARGET_CYCLE = 0.25
 
     # Mémoire des appareils actifs lors du cycle précédent {device_id: device_name}
     known_devices = {} 
