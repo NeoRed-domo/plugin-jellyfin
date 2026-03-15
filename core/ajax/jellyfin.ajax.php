@@ -406,30 +406,61 @@ if (init('action') == 'add') {
         $sessionType = $eqLogic->getConfiguration('session_type');
         $updated = 0;
 
+        // Fonction helper pour enrichir un trigger média
+        $enrichTrigger = function(&$trigger) use ($config, $userId, &$updated) {
+            if ($trigger['type'] != 'media' || empty($trigger['media_id'])) return;
+            $url = $config['baseUrl'] . '/Users/' . $userId . '/Items/' . $trigger['media_id'] . '?api_key=' . $config['apikey'] . '&Fields=RunTimeTicks,MediaSources,MediaStreams';
+            $itemData = jellyfin::requestApi($url);
+            if (!$itemData) return;
+            if (isset($itemData['RunTimeTicks'])) $trigger['duration_ticks'] = $itemData['RunTimeTicks'];
+            // Résolution vidéo
+            if (isset($itemData['MediaSources'][0]['MediaStreams'])) {
+                foreach ($itemData['MediaSources'][0]['MediaStreams'] as $stream) {
+                    if ($stream['Type'] == 'Video' && isset($stream['Width'])) {
+                        $w = $stream['Width'];
+                        if ($w >= 3800) $trigger['video_res'] = '4K';
+                        elseif ($w >= 1900) $trigger['video_res'] = '1080p';
+                        elseif ($w >= 1200) $trigger['video_res'] = '720p';
+                        elseif ($w > 0) $trigger['video_res'] = 'SD';
+                        break;
+                    }
+                }
+                // Audio
+                $audioSelected = null;
+                foreach ($itemData['MediaSources'][0]['MediaStreams'] as $stream) {
+                    if ($stream['Type'] == 'Audio') {
+                        if (isset($stream['IsDefault']) && $stream['IsDefault']) { $audioSelected = $stream; break; }
+                        if (!$audioSelected) $audioSelected = $stream;
+                    }
+                }
+                if ($audioSelected) {
+                    $codec = strtoupper($audioSelected['Codec'] ?? '');
+                    $codecDisplay = $codec;
+                    if (strpos($codec, 'DTS') !== false) { $codecDisplay = 'DTS'; if (strpos($codec, 'HD') !== false || (isset($audioSelected['Profile']) && strpos($audioSelected['Profile'], 'MA') !== false)) $codecDisplay = 'DTS-HD'; }
+                    if ($codec == 'AC3') $codecDisplay = 'DD';
+                    if ($codec == 'EAC3') $codecDisplay = 'DD+';
+                    if ($codec == 'TRUEHD') $codecDisplay = 'TrueHD';
+                    $channels = $audioSelected['Channels'] ?? 2;
+                    $chDisplay = '2.0';
+                    if ($channels >= 8) $chDisplay = '7.1';
+                    elseif ($channels >= 6) $chDisplay = '5.1';
+                    elseif ($channels == 1) $chDisplay = 'Mono';
+                    $trigger['audio_info'] = $codecDisplay . ' ' . $chDisplay;
+                }
+            }
+            $updated++;
+        };
+
         if ($sessionType == 'cinema') {
             foreach ($sessionData['sections'] as $sectionKey => &$section) {
                 foreach ($section['triggers'] as &$trigger) {
-                    if ($trigger['type'] == 'media' && !empty($trigger['media_id'])) {
-                        $url = $config['baseUrl'] . '/Users/' . $userId . '/Items/' . $trigger['media_id'] . '?api_key=' . $config['apikey'] . '&Fields=RunTimeTicks';
-                        $itemData = jellyfin::requestApi($url);
-                        if ($itemData && isset($itemData['RunTimeTicks'])) {
-                            $trigger['duration_ticks'] = $itemData['RunTimeTicks'];
-                            $updated++;
-                        }
-                    }
+                    $enrichTrigger($trigger);
                 }
             }
             unset($section, $trigger);
         } else {
             foreach ($sessionData['playlist'] as &$trigger) {
-                if ($trigger['type'] == 'media' && !empty($trigger['media_id'])) {
-                    $url = $config['baseUrl'] . '/Users/' . $userId . '/Items/' . $trigger['media_id'] . '?api_key=' . $config['apikey'] . '&Fields=RunTimeTicks';
-                    $itemData = jellyfin::requestApi($url);
-                    if ($itemData && isset($itemData['RunTimeTicks'])) {
-                        $trigger['duration_ticks'] = $itemData['RunTimeTicks'];
-                        $updated++;
-                    }
-                }
+                $enrichTrigger($trigger);
             }
             unset($trigger);
         }

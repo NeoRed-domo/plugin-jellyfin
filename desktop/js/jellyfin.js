@@ -340,7 +340,7 @@ var JellyfinBrowser = {
     selectMedia: function (itemId, title, imgTag, year, rating, overview, imgUrl, duration, videoRes, audioInfo, runTimeTicks) {
         $('.jelly-card').removeClass('selected');
         $('#card-' + itemId).addClass('selected');
-        JellyfinBrowser.selectedItem = {Id: itemId, Name: title, ImgTag: imgTag, RunTimeTicks: runTimeTicks || 0};
+        JellyfinBrowser.selectedItem = {Id: itemId, Name: title, ImgTag: imgTag, RunTimeTicks: runTimeTicks || 0, VideoRes: videoRes || '', AudioInfo: audioInfo || ''};
         
         $('#sel-title').text(title);
         $('#sel-year').text(year ? year : '');
@@ -766,6 +766,17 @@ var SessionEditor = {
             html += '<div style="background:#1a1a1a; padding:6px 10px; border-radius:3px; margin-bottom:3px; display:flex; align-items:center; gap:8px; font-size:12px; color:#ccc; opacity:' + opacity + ';">';
             html += '  <i class="fas ' + toggleIcon + ' cursor" style="color:' + toggleColor + '; font-size:14px;" onclick="SessionEditor.toggleTrigger(\'' + sectionKey + '\',' + i + ')" title="' + _t('Activer/Désactiver') + '"></i>';
             html += '  ' + icon + ' <span style="flex-grow:1;">' + label + '</span>';
+            // Badges techniques (résolution vidéo + audio)
+            if (t.type == 'media') {
+                var badgeStyle = 'background:#333; color:#ddd; padding:1px 5px; border-radius:3px; border:1px solid #555; font-size:10px; letter-spacing:0.3px;';
+                if (t.video_res) {
+                    var resColor = (t.video_res === '4K') ? '#1DB954' : '#ddd';
+                    html += '  <span style="' + badgeStyle + ' color:' + resColor + ';">' + t.video_res + '</span>';
+                }
+                if (t.audio_info) {
+                    html += '  <span style="' + badgeStyle + '">' + t.audio_info + '</span>';
+                }
+            }
             if (durStr) html += '  <span style="color:#666; font-size:11px;">' + durStr + '</span>';
             html += '  <span style="display:flex; gap:3px;">';
             if (i > 0) html += '    <i class="fas fa-arrow-up cursor" style="color:#666;" onclick="SessionEditor.moveTrigger(\'' + sectionKey + '\',' + i + ',-1)"></i>';
@@ -822,7 +833,9 @@ var SessionEditor = {
                         media_id: item.Id,
                         name: item.Name,
                         img_tag: item.ImgTag || '',
-                        duration_ticks: item.RunTimeTicks || 0
+                        duration_ticks: item.RunTimeTicks || 0,
+                        video_res: item.VideoRes || '',
+                        audio_info: item.AudioInfo || ''
                     });
                     SessionEditor.setTriggers(SessionEditor._pendingSection, triggers);
                     SessionEditor.save(function() {
