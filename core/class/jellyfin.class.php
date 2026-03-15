@@ -1111,8 +1111,18 @@ public function remoteControl($commandName, $_options = null) {
                 $engineState['last_position_ticks'] = $positionTicks;
             }
 
-            // Jellyfin auto-avance via la queue — pas de NextTrack manuel
-            // Le resync (ci-dessus) détecte le changement d'item_id automatiquement
+            // Pré-chauffage du prochain clip (~10s avant la fin)
+            // Déclenche la préparation du stream côté Jellyfin (transcode/cache)
+            if ($runTimeTicks > 0 && $status == 'Playing' && !($engineState['warmed_up'] ?? false)) {
+                $remainingSeconds = ($runTimeTicks - $positionTicks) / 10000000;
+                if ($remainingSeconds <= 10 && $remainingSeconds > 0) {
+                    $next = self::findNextMediaTrigger($sections, $engineState['current_section'], $engineState['current_trigger_index']);
+                    if ($next) {
+                        self::warmUpMedia($next['trigger']['media_id'], $config);
+                        $engineState['warmed_up'] = true;
+                    }
+                }
+            }
 
             // Tops film (uniquement en section film)
             if ($engineState['current_section'] == 'film' && isset($sections['film']['marks']) && $status == 'Playing') {
@@ -1156,6 +1166,7 @@ public function remoteControl($commandName, $_options = null) {
         unset($engineState['stopped_since']);
         unset($engineState['stuck_since']);
         unset($engineState['last_position_ticks']);
+        unset($engineState['warmed_up']);
         if ($next['section'] != $previousSection) {
             self::triggerLighting($sessionEq->getSessionLighting($next['section']));
             $engineState['current_lighting'] = $next['section'];
@@ -1355,6 +1366,26 @@ public function remoteControl($commandName, $_options = null) {
     /**
      * Collecter tous les media_id restants après la position courante.
      */
+    /**
+     * Pré-chauffe un média côté Jellyfin : déclenche la résolution du stream
+     * et le démarrage du transcodage si nécessaire, SANS lancer la lecture.
+     */
+    private static function warmUpMedia($mediaId, $config) {
+        $userId = self::getPrimaryUserId();
+        if (!$userId) return;
+        // Appel PlaybackInfo — force Jellyfin à préparer le stream (transcode/direct play)
+        $url = $config['baseUrl'] . '/Items/' . $mediaId . '/PlaybackInfo?UserId=' . $userId . '&api_key=' . $config['apikey'];
+        self::requestApi($url, 'POST', [
+            'DeviceProfile' => new \stdClass(), // Profil vide = Jellyfin prépare quand même
+            'MaxStreamingBitrate' => 120000000,
+            'EnableDirectPlay' => true,
+            'EnableDirectStream' => true,
+            'EnableTranscoding' => true,
+            'AutoOpenLiveStream' => true
+        ], false, 2);
+        log::add('jellyfin', 'info', 'Warm-up média: ' . $mediaId . ' (préparation stream Jellyfin)');
+    }
+
     private static function collectAllRemainingMediaIds($sections, $currentSection, $currentIndex) {
         $mediaIds = [];
         $sectionOrder = self::SECTION_ORDER;
