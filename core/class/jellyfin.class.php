@@ -1026,17 +1026,8 @@ public function remoteControl($commandName, $_options = null) {
         // Condition : status Stopped + currentMediaId set + PAS de lancement en attente
         $launchAt = $engineState['media_launch_at'] ?? 0;
         if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
-            // Si playlist active (queued=true), Jellyfin devrait auto-avancer.
-            // On attend 1 tick (0.5s) pour laisser le daemon détecter le nouveau clip.
-            // Si au tick suivant on voit un nouveau clip jouer (resync dans STATE 2), c'est bon.
-            // Sinon on fallback via playMedia.
-            if (!isset($engineState['stopped_since'])) {
-                $engineState['stopped_since'] = $now;
-                cache::set($cacheKey, json_encode($engineState));
-                return; // Attendre 1 tick
-            }
-            // Déjà attendu au moins 1 tick — fallback
-            log::add('jellyfin', 'debug', 'Média terminé, fallback: ' . $currentMediaId);
+            // Média terminé → enchaîner immédiatement (pas d'attente)
+            log::add('jellyfin', 'debug', 'Média terminé, enchaînement: ' . $currentMediaId);
             unset($engineState['stopped_since']);
             unset($engineState['stuck_since']);
             unset($engineState['last_position_ticks']);
@@ -1193,13 +1184,15 @@ public function remoteControl($commandName, $_options = null) {
             $previousSection = $engineState['current_section'];
             self::transitionTo($sessionEq, $engineState, $next, $previousSection);
 
-            // Exécuter les non-média entre l'ancien index et le nouveau
-            // (si même section et triggers intermédiaires)
-            // Pour simplifier : on lance directement le média trouvé
-            $launched = $playerEq->playMedia($next['trigger']['media_id'], 'play_now');
-            if (isset($launched['error'])) {
-                log::add('jellyfin', 'error', 'playMedia a échoué pour: ' . $next['trigger']['media_id'] . ' — ' . $launched['error']);
-                // Récursion sécurisée (max depth via retries)
+            // Lancer ce média + tous les suivants en playlist
+            $sections = $sessionData['sections'] ?? [];
+            $allMediaIds = [$next['trigger']['media_id']];
+            $remaining = self::collectAllRemainingMediaIds($sections, $next['section'], $next['index']);
+            $allMediaIds = array_merge($allMediaIds, $remaining);
+
+            $launched = self::playMediaPlaylist($playerEq, $allMediaIds, $config);
+            if (!$launched) {
+                log::add('jellyfin', 'error', 'playMediaPlaylist a échoué pour: ' . $next['trigger']['media_id']);
                 $engineState['launch_retries'] = ($engineState['launch_retries'] ?? 0) + 1;
                 if (($engineState['launch_retries'] ?? 0) <= self::MAX_LAUNCH_RETRIES) {
                     self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
@@ -1211,8 +1204,8 @@ public function remoteControl($commandName, $_options = null) {
             }
 
             $engineState['media_launch_at'] = time();
-            $engineState['queued'] = false; // Le queue sera fait quand le clip joue réellement
-            log::add('jellyfin', 'info', 'Lancement: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . '[' . $next['index'] . '])');
+            $engineState['queued'] = (count($allMediaIds) > 1);
+            log::add('jellyfin', 'info', 'Lancement playlist: ' . count($allMediaIds) . ' médias (section: ' . $next['section'] . '[' . $next['index'] . '])');
             cache::set($cacheKey, json_encode($engineState));
         } else {
             log::add('jellyfin', 'info', 'Plus de médias à jouer. Fin de séance.');
