@@ -1310,6 +1310,7 @@ public function remoteControl($commandName, $_options = null) {
 
     private static function tickCommercial($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
         if (!$config) return;
+        $now = time();
 
         $playlist = $sessionData['playlist'] ?? [];
         if (empty($playlist)) return;
@@ -1318,6 +1319,49 @@ public function remoteControl($commandName, $_options = null) {
         $triggerIndex = $engineState['current_trigger_index'] ?? 0;
         $currentMedia = $playlist[$triggerIndex] ?? null;
         if (!$currentMedia) return;
+        $currentMediaId = $engineState['current_media_id'] ?? '';
+
+        // Média terminé → enchaîner (même logique que tickCinema STATE 3)
+        $launchAt = $engineState['media_launch_at'] ?? 0;
+        if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
+            log::add('jellyfin', 'info', 'Commercial: média terminé, enchaînement');
+            self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
+            return;
+        }
+
+        // Attente lancement (même logique que tickCinema STATE 1)
+        if (!empty($currentMediaId) && $launchAt > 0 && $status != 'Playing' && $status != 'Paused') {
+            $retries = $engineState['launch_retries'] ?? 0;
+            $elapsed = $now - $launchAt;
+            if ($elapsed < self::LAUNCH_TIMEOUT) {
+                cache::set($cacheKey, json_encode($engineState));
+                return;
+            }
+            if ($retries < self::MAX_LAUNCH_RETRIES) {
+                $engineState['launch_retries'] = $retries + 1;
+                $engineState['media_launch_at'] = $now;
+                log::add('jellyfin', 'warning', 'Commercial: média ne démarre pas, retry: ' . $currentMediaId);
+                $deviceId = $playerEq->getConfiguration('device_id');
+                $jellySession = self::getSessionDataFromDeviceId($config['baseUrl'], $config['apikey'], $deviceId);
+                if ($jellySession && isset($jellySession['Id'])) {
+                    $url = $config['baseUrl'] . '/Sessions/' . $jellySession['Id'] . '/Playing?ItemIds=' . $currentMediaId . '&PlayCommand=PlayNow&StartPositionTicks=0&api_key=' . $config['apikey'];
+                    self::requestApi($url, 'POST', null, false, 2);
+                }
+                cache::set($cacheKey, json_encode($engineState));
+                return;
+            }
+            log::add('jellyfin', 'error', 'Commercial: média en échec, skip: ' . $currentMediaId);
+            self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
+            return;
+        }
+
+        // En lecture : reset flags de lancement après confirmation 3s
+        if ($status == 'Playing' || $status == 'Paused') {
+            if ($launchAt > 0 && ($now - $launchAt) > 3) {
+                unset($engineState['media_launch_at']);
+                unset($engineState['launch_retries']);
+            }
+        }
 
         $nextAnticipation = (float)config::byKey('next_anticipation', 'jellyfin', 0.5);
 
@@ -1343,31 +1387,6 @@ public function remoteControl($commandName, $_options = null) {
                     }
                 }
             }
-        }
-
-        // Média terminé sans anticipation (fallback)
-        $currentMediaId = $engineState['current_media_id'] ?? '';
-        if ($status == 'Stopped' && !empty($currentMediaId) && ($engineState['media_launch_at'] ?? 0) == 0) {
-            $isLast = ($triggerIndex + 1 >= count($playlist));
-            if ($isLast && !$loop) {
-                $sessionEq->stopSession();
-                return;
-            }
-            // Lancer le suivant
-            $nextIndex = $isLast ? 0 : $triggerIndex + 1;
-            $nextMedia = $playlist[$nextIndex];
-            $playerEq->playMedia($nextMedia['media_id'], 'play_now');
-            $engineState['current_trigger_index'] = $nextIndex;
-            $engineState['current_media_id'] = $nextMedia['media_id'];
-            $engineState['media_launch_at'] = time();
-            $engineState['queued'] = false;
-            // Queue le suivant
-            $nextNextIndex = ($nextIndex + 1 >= count($playlist)) ? ($loop ? 0 : -1) : $nextIndex + 1;
-            if ($nextNextIndex >= 0 && $jellyfinSessionId && isset($playlist[$nextNextIndex])) {
-                self::queueMediaDirect($jellyfinSessionId, $playlist[$nextNextIndex]['media_id'], $config);
-                $engineState['queued'] = true;
-            }
-            log::add('jellyfin', 'info', 'Commercial fallback → index ' . $nextIndex);
         }
 
         self::updateSessionProgress($sessionEq, $sessionData, $engineState);
