@@ -1068,9 +1068,13 @@ public function remoteControl($commandName, $_options = null) {
 
         // === ÉTAT 2 : LE MÉDIA EST EN LECTURE ===
         if ($status == 'Playing' || $status == 'Paused') {
-            // Réinitialiser les compteurs de lancement
-            unset($engineState['media_launch_at']);
-            unset($engineState['launch_retries']);
+            // Réinitialiser les compteurs SEULEMENT après confirmation stable (>3s)
+            // Évite le cas où le média apparaît brièvement "Playing" puis échoue
+            $launchAtState2 = $engineState['media_launch_at'] ?? 0;
+            if ($launchAtState2 > 0 && ($now - $launchAtState2) > 3) {
+                unset($engineState['media_launch_at']);
+                unset($engineState['launch_retries']);
+            }
             unset($engineState['stopped_since']);
 
             // Queue TOUS les médias restants dès que le premier clip est confirmé en lecture
