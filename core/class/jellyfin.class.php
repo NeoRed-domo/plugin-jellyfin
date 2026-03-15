@@ -1077,14 +1077,20 @@ public function remoteControl($commandName, $_options = null) {
             }
 
             // Resync si le lecteur joue un média inattendu
-            if ($status == 'Playing' && !empty($itemId) && !empty($currentMediaId) && $itemId != $currentMediaId) {
-                $found = self::findTriggerByMediaId($sections, $itemId);
-                if ($found) {
-                    $engineState['current_section'] = $found['section'];
-                    $engineState['current_trigger_index'] = $found['index'];
-                    $engineState['current_media_id'] = $itemId;
-                    $engineState['queued'] = false;
-                    log::add('jellyfin', 'info', 'Resync: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
+            // SAUF si on vient de faire un NextTrack anticipé (le daemon n'a pas encore rattrapé)
+            $anticipatedAt = $engineState['anticipated_at'] ?? 0;
+            $sincAnticipation = ($anticipatedAt > 0) ? ($now - $anticipatedAt) : 999;
+            if ($sincAnticipation > 5) {
+                unset($engineState['anticipated_at']);
+                if ($status == 'Playing' && !empty($itemId) && !empty($currentMediaId) && $itemId != $currentMediaId) {
+                    $found = self::findTriggerByMediaId($sections, $itemId);
+                    if ($found) {
+                        $engineState['current_section'] = $found['section'];
+                        $engineState['current_trigger_index'] = $found['index'];
+                        $engineState['current_media_id'] = $itemId;
+                        $engineState['queued'] = false;
+                        log::add('jellyfin', 'info', 'Resync: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
+                    }
                 }
             }
 
@@ -1117,6 +1123,8 @@ public function remoteControl($commandName, $_options = null) {
                     if ($next) {
                         self::sendNextTrackDirect($jellyfinSessionId, $config);
                         self::transitionTo($sessionEq, $engineState, $next, $currentSection);
+                        $engineState['media_launch_at'] = time(); // Protège contre STATE 3 prématuré
+                        $engineState['anticipated_at'] = time();  // Protège contre resync prématuré
                         log::add('jellyfin', 'info', 'NextTrack anticipé → ' . $next['trigger']['media_id'] . ' (transition fluide)');
                     }
                 }
