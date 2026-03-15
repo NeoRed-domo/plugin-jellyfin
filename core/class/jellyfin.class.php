@@ -994,7 +994,7 @@ public function remoteControl($commandName, $_options = null) {
     const MAX_LAUNCH_RETRIES = 2;
     const LAUNCH_TIMEOUT = 5;     // secondes pour qu'un média démarre
     const STUCK_TIMEOUT = 30;     // secondes sans changement de position = bloqué
-    const QUEUE_GRACE_PERIOD = 4; // secondes d'attente pour l'auto-avancement Jellyfin après queue
+    const QUEUE_GRACE_PERIOD = 2; // secondes d'attente pour l'auto-avancement Jellyfin après queue
 
     private static function tickCinema($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
         if (!$config) return;
@@ -1086,15 +1086,9 @@ public function remoteControl($commandName, $_options = null) {
             unset($engineState['launch_retries']);
             unset($engineState['stopped_since']);
 
-            // Queue le prochain média dès que le clip est confirmé en lecture
-            if ($status == 'Playing' && !($engineState['queued'] ?? false) && $jellyfinSessionId) {
-                $next = self::findNextMediaTrigger($sections, $engineState['current_section'], $engineState['current_trigger_index']);
-                if ($next) {
-                    self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
-                    $engineState['queued'] = true;
-                    $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
-                    log::add('jellyfin', 'info', 'Queue confirmé (clip en lecture): ' . $next['trigger']['media_id']);
-                }
+            // Queue TOUS les médias restants dès que le premier clip est confirmé en lecture
+            if ($status == 'Playing' && !($engineState['queued'] ?? false)) {
+                self::queueAllRemainingMedia($playerEq, $sessionData, $engineState, $config);
             }
 
             // Resync : quand Jellyfin auto-avance via la queue, on détecte le nouvel item_id
@@ -1115,15 +1109,7 @@ public function remoteControl($commandName, $_options = null) {
                         $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$found['section']] ?? $found['section']);
                     }
                     log::add('jellyfin', 'info', 'Auto-avancement détecté: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
-                    // Queue le prochain clip immédiatement
-                    if ($jellyfinSessionId) {
-                        $nextAfter = self::findNextMediaTrigger($sections, $found['section'], $found['index']);
-                        if ($nextAfter) {
-                            self::queueMediaDirect($jellyfinSessionId, $nextAfter['trigger']['media_id'], $config);
-                            $engineState['queued'] = true;
-                            log::add('jellyfin', 'info', 'Queue après auto-avancement: ' . $nextAfter['trigger']['media_id']);
-                        }
-                    }
+                    // Pas besoin de re-queue: toute la playlist est déjà dans Jellyfin
                 }
             }
 
@@ -1245,30 +1231,54 @@ public function remoteControl($commandName, $_options = null) {
     }
 
     /**
-     * Queue immédiatement le prochain média après le média courant.
-     * Jellyfin pré-charge le clip suivant → transition quasi-instantanée.
+     * Queue TOUS les médias restants après le média courant.
+     * Jellyfin reçoit la playlist complète → transitions internes fluides.
      */
-    private static function queueNextMediaAfterCurrent($playerEq, $sessionData, &$engineState, $config) {
+    private static function queueAllRemainingMedia($playerEq, $sessionData, &$engineState, $config) {
         $sections = $sessionData['sections'] ?? [];
         $currentSection = $engineState['current_section'] ?? '';
         $currentIndex = $engineState['current_trigger_index'] ?? 0;
 
-        $next = self::findNextMediaTrigger($sections, $currentSection, $currentIndex);
-        if (!$next) return;
-
-        // Résoudre la session Jellyfin pour l'appel Queue
+        // Résoudre la session Jellyfin
         $deviceId = $playerEq->getConfiguration('device_id');
         $jellyfinSession = self::getSessionDataFromDeviceId($config['baseUrl'], $config['apikey'], $deviceId);
         $jellyfinSessionId = $jellyfinSession['Id'] ?? null;
-
-        if ($jellyfinSessionId) {
-            self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
-            $engineState['queued'] = true;
-            $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
-            log::add('jellyfin', 'info', 'Queue immédiat: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . ')');
-        } else {
+        if (!$jellyfinSessionId) {
             log::add('jellyfin', 'warning', 'Impossible de queue: session Jellyfin introuvable');
+            return;
         }
+
+        // Collecter tous les médias restants
+        $mediaIds = [];
+        $sectionOrder = self::SECTION_ORDER;
+        $sectionIdx = array_search($currentSection, $sectionOrder);
+
+        // Même section, après le trigger courant
+        $triggers = $sections[$currentSection]['triggers'] ?? [];
+        for ($i = $currentIndex + 1; $i < count($triggers); $i++) {
+            if ($triggers[$i]['type'] == 'media' && (!isset($triggers[$i]['enabled']) || $triggers[$i]['enabled'] !== false)) {
+                $mediaIds[] = $triggers[$i]['media_id'];
+            }
+        }
+
+        // Sections suivantes
+        for ($s = $sectionIdx + 1; $s < count($sectionOrder); $s++) {
+            $secKey = $sectionOrder[$s];
+            foreach ($sections[$secKey]['triggers'] ?? [] as $trigger) {
+                if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
+                    $mediaIds[] = $trigger['media_id'];
+                }
+            }
+        }
+
+        if (empty($mediaIds)) return;
+
+        // Queue tous les médias d'un coup (Jellyfin supporte les ItemIds multiples)
+        $allIds = implode(',', $mediaIds);
+        $url = $config['baseUrl'] . '/Sessions/' . $jellyfinSessionId . '/Queue?ItemIds=' . $allIds . '&Mode=PlayNext&api_key=' . $config['apikey'];
+        self::requestApi($url, 'POST', null, false, 2);
+        $engineState['queued'] = true;
+        log::add('jellyfin', 'info', 'Playlist complète queue: ' . count($mediaIds) . ' médias');
     }
 
     private static function tickCommercial($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
