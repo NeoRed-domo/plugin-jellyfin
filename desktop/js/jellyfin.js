@@ -830,10 +830,15 @@ var SessionEditor = {
                     }
                 });
             }
-            // Picker commande Jeedom
+            // Picker commande Jeedom — on masque la bootbox pour que le sélecteur Jeedom soit accessible
             $('#action_cmd_pick').on('click', function() {
+                var $bootboxModal = $(this).closest('.modal');
+                $bootboxModal.css('z-index', 0);
+                $bootboxModal.find('.modal-backdrop').css('z-index', 0);
                 jeedom.cmd.getSelectModal({ cmd: { type: 'action' } }, function(result) {
                     $('#action_cmd_input').val(result.human).data('cmd_id', result.cmd.id);
+                    $bootboxModal.css('z-index', '');
+                    $bootboxModal.find('.modal-backdrop').css('z-index', '');
                 });
             });
         }, 300);
