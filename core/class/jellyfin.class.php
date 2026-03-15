@@ -900,8 +900,23 @@ public function remoteControl($commandName, $_options = null) {
         $sessionData = $sessionEq->getConfiguration('session_data');
 
         if ($playerData === null) {
-            self::handlePlayerLost($sessionEq, $engineState, $cacheKey);
-            return;
+            // Le lecteur n'apparaît plus dans les données du daemon.
+            // Si on avait un média en cours, c'est probablement qu'il vient de finir
+            // (le daemon ne remonte que les sessions avec NowPlayingItem).
+            // On synthétise un status "Stopped" pour que le moteur enchaîne.
+            $currentMediaId = $engineState['current_media_id'] ?? '';
+            if (!empty($currentMediaId)) {
+                $playerData = [
+                    'status' => 'Stopped',
+                    'item_id' => '',
+                    'position_ticks' => 0,
+                    'run_time_ticks' => 0
+                ];
+                log::add('jellyfin', 'debug', 'Lecteur absent du daemon mais média attendu — traitement comme Stopped');
+            } else {
+                self::handlePlayerLost($sessionEq, $engineState, $cacheKey);
+                return;
+            }
         }
 
         if (isset($engineState['player_lost_since'])) {
