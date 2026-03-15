@@ -21,24 +21,40 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <br>
                 <span><?php echo __('Configuration', __FILE__); ?></span>
             </div>
+            <div class="cursor eqLogicAction logoPrimary" data-action="add_session">
+                <i class="fas fa-film"></i>
+                <br>
+                <span><?php echo __('Nouvelle séance', __FILE__); ?></span>
+            </div>
         </div>
         <legend><i class="fas fa-tv"></i>  <?php echo __('Mes Lecteurs Jellyfin', __FILE__); ?></legend>
         <div class="eqLogicThumbnailContainer">
             <?php
             foreach ($eqLogics as $eqLogic) {
+                if ($eqLogic->getConfiguration('session_type') != '') continue;
                 $opacity = ($eqLogic->getIsEnable()) ? '' : 'opacity:0.3;';
-                
-                // MODIF 1 : Ajout de !important sur la height pour forcer l'affichage
-                // On garde une hauteur fixe (300px) pour que la grille reste alignée proprement
                 echo '<div class="eqLogicDisplayCard cursor" data-eqLogic_id="' . $eqLogic->getId() . '" style="text-align: center; background-color : #ffffff; height : 220px !important; margin-bottom : 10px; padding : 5px; border-radius: 2px; width : 160px; margin-left : 10px;' . $opacity . '">';
-                
                 echo '<img src="' . $plugin->getPathImgIcon() . '" height="105" width="95" />';
                 echo "<br>";
-                
-                // MODIF 2 : Texte en display block avec hauteur automatique pour prendre la place nécessaire
-                // word-break assure que les mots très longs ne sortent pas du cadre
                 echo '<span style="display: block; margin-top: 10px; font-size: 1.1em; word-break: break-word; overflow: hidden;">' . $eqLogic->getHumanName(true, true) . '</span>';
-                
+                echo '</div>';
+            }
+            ?>
+        </div>
+        <legend><i class="fas fa-film"></i>  <?php echo __('Mes Séances', __FILE__); ?></legend>
+        <div class="eqLogicThumbnailContainer">
+            <?php
+            foreach ($eqLogics as $eqLogic) {
+                $sessionType = $eqLogic->getConfiguration('session_type');
+                if ($sessionType == '') continue;
+                $opacity = ($eqLogic->getIsEnable()) ? '' : 'opacity:0.3;';
+                $icon = ($sessionType == 'cinema') ? 'fa-film' : 'fa-redo';
+                $typeLabel = ($sessionType == 'cinema') ? __('Cinéma', __FILE__) : __('Commercial', __FILE__);
+                echo '<div class="eqLogicDisplayCard cursor" data-eqLogic_id="' . $eqLogic->getId() . '" style="text-align: center; background-color : #ffffff; height : 220px !important; margin-bottom : 10px; padding : 5px; border-radius: 2px; width : 160px; margin-left : 10px;' . $opacity . '">';
+                echo '<i class="fas ' . $icon . '" style="font-size:60px;color:#1DB954;margin-top:20px;"></i>';
+                echo "<br>";
+                echo '<span style="display: block; margin-top: 10px; font-size: 1.1em; word-break: break-word; overflow: hidden;">' . $eqLogic->getHumanName(true, true) . '</span>';
+                echo '<span class="label label-info" style="margin-top:5px;">' . $typeLabel . '</span>';
                 echo '</div>';
             }
             ?>
@@ -54,6 +70,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
         <ul class="nav nav-tabs" role="tablist">
             <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
             <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> <?php echo __('Equipement', __FILE__); ?></a></li>
+            <li role="presentation" class="session-tab-li" style="display:none;"><a href="#sessiontab" aria-controls="session" role="tab" data-toggle="tab"><i class="fas fa-film"></i> <?php echo __('Séance', __FILE__); ?></a></li>
             <li role="presentation"><a href="#commandtab" aria-controls="profile" role="tab" data-toggle="tab"><i class="fas fa-list-alt"></i> <?php echo __('Commandes', __FILE__); ?></a></li>
         </ul>
         <div class="tab-content" style="height:calc(100% - 50px);overflow:auto;overflow-x:hidden;">
@@ -90,7 +107,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
 
                         <hr>
-                        <div class="form-group">
+                        <div class="form-group device-only">
                             <label class="col-sm-3 control-label"><?php echo __('Device ID (Client)', __FILE__); ?></label>
                             <div class="col-sm-3">
                                 <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_id" placeholder="<?php echo __('L\'ID du lecteur à surveiller', __FILE__); ?>" />
@@ -98,14 +115,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
                         
-                        <div class="form-group">
+                        <div class="form-group device-only">
                             <label class="col-sm-3 control-label"><?php echo __('Afficher le liseré', __FILE__); ?></label>
                             <div class="col-sm-3">
                                 <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="widget_border_enable" /><?php echo __('Activer', __FILE__); ?></label>
                             </div>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group device-only">
                             <label class="col-sm-3 control-label"><?php echo __('Couleur du liseré', __FILE__); ?></label>
                             <div class="col-sm-3">
                                 <input type="color" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="widget_border_color" />
@@ -113,8 +130,34 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
 
+                        <div class="form-group session-only" style="display:none;">
+                            <label class="col-sm-3 control-label"><?php echo __('Type de séance', __FILE__); ?></label>
+                            <div class="col-sm-3">
+                                <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="session_type" readonly style="background:#eee;" />
+                            </div>
+                        </div>
+                        <div class="form-group session-only" style="display:none;">
+                            <label class="col-sm-3 control-label"><?php echo __('Lecteur', __FILE__); ?></label>
+                            <div class="col-sm-3">
+                                <select id="sel_session_player" class="form-control">
+                                    <option value=""><?php echo __('Sélectionner un lecteur', __FILE__); ?></option>
+                                    <?php
+                                    foreach ($eqLogics as $eq) {
+                                        if ($eq->getConfiguration('session_type') != '' || !$eq->getIsEnable()) continue;
+                                        echo '<option value="' . $eq->getId() . '">' . $eq->getName() . '</option>';
+                                    }
+                                    ?>
+                                </select>
+                            </div>
+                        </div>
+
                     </fieldset>
                 </form>
+            </div>
+
+            <div role="tabpanel" class="tab-pane" id="sessiontab">
+                <div id="session-editor-container" style="padding: 15px;">
+                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="commandtab">
@@ -137,11 +180,36 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
 <script>
     function printEqLogic(_eqLogic) {
-        if (_eqLogic.configuration.widget_border_color == undefined || _eqLogic.configuration.widget_border_color == '') {
-            $('.eqLogicAttr[data-l2key=widget_border_color]').val('#e5e5e5');
-        }
-        if (_eqLogic.configuration.widget_border_enable == undefined) {
-            $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', false);
+        var isSession = (_eqLogic.configuration && _eqLogic.configuration.session_type && _eqLogic.configuration.session_type != '');
+
+        if (isSession) {
+            $('.session-only').show();
+            $('.device-only').hide();
+            $('.session-tab-li').show();
+
+            // Pré-sélectionner le lecteur
+            var sd = _eqLogic.configuration.session_data;
+            if (sd && sd.player_id) {
+                $('#sel_session_player').val(sd.player_id);
+            } else {
+                $('#sel_session_player').val('');
+            }
+
+            // Charger l'éditeur de séance
+            if (typeof SessionEditor !== 'undefined') {
+                SessionEditor.load(_eqLogic.id);
+            }
+        } else {
+            $('.session-only').hide();
+            $('.device-only').show();
+            $('.session-tab-li').hide();
+
+            if (_eqLogic.configuration.widget_border_color == undefined || _eqLogic.configuration.widget_border_color == '') {
+                $('.eqLogicAttr[data-l2key=widget_border_color]').val('#e5e5e5');
+            }
+            if (_eqLogic.configuration.widget_border_enable == undefined) {
+                $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', false);
+            }
         }
     }
 </script>

@@ -503,3 +503,658 @@ setInterval(function() {
         });
     }
 }, 5000);
+
+// --- GESTION DES SÉANCES ---
+
+$('body').off('click', '.eqLogicAction[data-action=add_session]').on('click', '.eqLogicAction[data-action=add_session]', function() {
+    bootbox.dialog({
+        title: _t('Nouvelle séance'),
+        message: '<div class="form-group">' +
+            '<label>' + _t('Nom de la séance') + '</label>' +
+            '<input type="text" id="input_session_name" class="form-control" placeholder="' + _t('Ex: Soirée Interstellar') + '">' +
+            '</div>' +
+            '<div class="form-group">' +
+            '<label>' + _t('Type') + '</label>' +
+            '<select id="input_session_type" class="form-control">' +
+            '<option value="cinema">' + _t('Séance cinéma') + '</option>' +
+            '<option value="commercial">' + _t('Diffusion commerciale') + '</option>' +
+            '</select>' +
+            '</div>',
+        buttons: {
+            cancel: { label: _t('Annuler'), className: 'btn-default' },
+            confirm: {
+                label: _t('Créer'), className: 'btn-success',
+                callback: function() {
+                    var name = $('#input_session_name').val();
+                    var type = $('#input_session_type').val();
+                    if (!name) return false;
+                    $.ajax({
+                        type: 'POST',
+                        url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'create_session', name: name, session_type: type },
+                        dataType: 'json',
+                        success: function(data) {
+                            if (data.state == 'ok') {
+                                window.location.href = 'index.php?v=d&m=jellyfin&p=jellyfin&id=' + data.result.id;
+                            } else {
+                                $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+});
+
+// Sélecteur lecteur → maj session_data.player_id
+$('#sel_session_player').on('change', function() {
+    if (typeof SessionEditor !== 'undefined' && SessionEditor.sessionData) {
+        SessionEditor.sessionData.player_id = parseInt($(this).val()) || null;
+        SessionEditor.save();
+    }
+});
+
+// --- ÉDITEUR DE SÉANCE (ACCORDÉON) ---
+
+var SessionEditor = {
+    eqLogicId: null,
+    sessionType: null,
+    sessionData: null,
+    sectionsMeta: null,
+    marksMeta: null,
+
+    load: function(eqLogicId) {
+        SessionEditor.eqLogicId = eqLogicId;
+        $('#session-editor-container').html('<div class="text-center" style="padding:40px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'get_session_data', id: eqLogicId },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state != 'ok') {
+                    $('#session-editor-container').html('<div class="alert alert-danger">' + data.result + '</div>');
+                    return;
+                }
+                SessionEditor.sessionType = data.result.session_type;
+                SessionEditor.sessionData = data.result.session_data;
+                SessionEditor.sectionsMeta = data.result.sections_meta;
+                SessionEditor.marksMeta = data.result.marks_meta;
+                if (SessionEditor.sessionType == 'cinema') {
+                    SessionEditor.renderCinema();
+                } else {
+                    SessionEditor.renderCommercial();
+                }
+            }
+        });
+    },
+
+    renderCinema: function() {
+        var html = '';
+        var order = SessionEditor.sectionsMeta.order;
+        var labels = SessionEditor.sectionsMeta.labels;
+        var colors = SessionEditor.sectionsMeta.colors;
+
+        for (var i = 0; i < order.length; i++) {
+            var key = order[i];
+            var section = SessionEditor.sessionData.sections[key] || { triggers: [] };
+            var triggers = section.triggers || [];
+            var color = colors[key] || '#888';
+            var label = labels[key] || key;
+            var dur = SessionEditor.calculateDuration(triggers);
+            var count = triggers.length;
+
+            html += '<div class="session-section" data-section="' + key + '">';
+            html += '  <div class="session-section-header" onclick="SessionEditor.toggleSection(\'' + key + '\')" style="cursor:pointer; background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px; margin-bottom:2px; display:flex; align-items:center; gap:10px;">';
+            html += '    <span style="color:' + color + '; font-size:16px;">●</span>';
+            html += '    <span style="color:' + color + '; font-weight:bold; flex-grow:1;">' + label + '</span>';
+            html += '    <span style="color:#888; font-size:12px;">' + count + ' ' + _t('élément(s)') + '</span>';
+            html += '    <span style="color:#aaa; font-size:12px; font-family:monospace;">' + dur + '</span>';
+            html += '    <i class="fas fa-chevron-right session-section-chevron" style="color:#666; transition:transform 0.2s;"></i>';
+            html += '  </div>';
+            html += '  <div class="session-section-body" data-section="' + key + '" style="display:none; border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; margin-bottom:8px; background:#222;">';
+            html += SessionEditor.renderTriggerList(triggers, key);
+            html += '    <div style="margin-top:8px; display:flex; gap:6px;">';
+            html += '      <button class="btn btn-xs btn-primary" onclick="SessionEditor.addMedia(\'' + key + '\')"><i class="fas fa-film"></i> ' + _t('Média') + '</button>';
+            html += '      <button class="btn btn-xs btn-warning" onclick="SessionEditor.addPause(\'' + key + '\')"><i class="fas fa-pause"></i> ' + _t('Pause') + '</button>';
+            html += '      <button class="btn btn-xs btn-danger" onclick="SessionEditor.addAction(\'' + key + '\')"><i class="fas fa-bolt"></i> ' + _t('Action') + '</button>';
+            html += '    </div>';
+            html += '  </div>';
+            html += '</div>';
+        }
+
+        html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
+        html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale estimée') + ' : <strong style="color:#fff;" id="session-total-duration">' + SessionEditor.calculateTotalDuration() + '</strong></span>';
+        html += '  <div style="display:flex; gap:6px;">';
+        html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
+        html += '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.openFromEditor()"><i class="fas fa-crosshairs"></i> ' + _t('Calibrer tops') + '</button>';
+        html += '  </div>';
+        html += '</div>';
+
+        $('#session-editor-container').html(html);
+    },
+
+    renderCommercial: function() {
+        var playlist = SessionEditor.sessionData.playlist || [];
+        var dur = SessionEditor.calculateDuration(playlist);
+
+        var html = '<div class="session-section" data-section="playlist">';
+        html += '  <div style="background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px 4px 0 0; display:flex; align-items:center; gap:10px;">';
+        html += '    <span style="color:#1DB954; font-size:16px;">●</span>';
+        html += '    <span style="color:#1DB954; font-weight:bold; flex-grow:1;">' + _t('Playlist') + '</span>';
+        html += '    <span style="color:#888; font-size:12px;">' + playlist.length + ' ' + _t('média(s)') + '</span>';
+        html += '    <span style="color:#aaa; font-size:12px; font-family:monospace;">' + dur + '</span>';
+        html += '  </div>';
+        html += '  <div style="border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; background:#222;">';
+        html += SessionEditor.renderTriggerList(playlist, 'playlist');
+        html += '    <div style="margin-top:8px;">';
+        html += '      <button class="btn btn-xs btn-primary" onclick="SessionEditor.addMedia(\'playlist\')"><i class="fas fa-film"></i> ' + _t('Média') + '</button>';
+        html += '    </div>';
+        html += '  </div>';
+        html += '</div>';
+
+        html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
+        html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale') + ' : <strong style="color:#fff;" id="session-total-duration">' + dur + '</strong> · <i class="fas fa-redo"></i> ' + _t('Boucle infinie') + '</span>';
+        html += '  <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
+        html += '</div>';
+
+        $('#session-editor-container').html(html);
+    },
+
+    renderTriggerList: function(triggers, sectionKey) {
+        if (!triggers || triggers.length == 0) {
+            return '<div style="color:#555; font-size:12px; padding:5px; text-align:center;">' + _t('Aucun élément') + '</div>';
+        }
+        var html = '';
+        for (var i = 0; i < triggers.length; i++) {
+            var t = triggers[i];
+            var icon = '', label = '', durStr = '';
+            if (t.type == 'media') {
+                icon = '<i class="fas fa-film" style="color:#3498db;"></i>';
+                label = t.name || t.media_id;
+                if (t.duration_ticks) durStr = SessionEditor.ticksToTime(t.duration_ticks);
+            } else if (t.type == 'pause') {
+                icon = '<i class="fas fa-pause-circle" style="color:#f39c12;"></i>';
+                label = t.duration > 0 ? _t('Pause') + ' ' + t.duration + 's' : _t('Pause illimitée');
+            } else if (t.type == 'command') {
+                icon = '<i class="fas fa-bolt" style="color:#e74c3c;"></i>';
+                label = t.label || (_t('Commande') + ' #' + t.cmd_id);
+            } else if (t.type == 'scenario') {
+                icon = '<i class="fas fa-cogs" style="color:#9b59b6;"></i>';
+                label = t.label || (_t('Scénario') + ' #' + t.scenario_id);
+            }
+            html += '<div style="background:#1a1a1a; padding:6px 10px; border-radius:3px; margin-bottom:3px; display:flex; align-items:center; gap:8px; font-size:12px; color:#ccc;">';
+            html += '  ' + icon + ' <span style="flex-grow:1;">' + label + '</span>';
+            if (durStr) html += '  <span style="color:#666; font-size:11px;">' + durStr + '</span>';
+            html += '  <span style="display:flex; gap:3px;">';
+            if (i > 0) html += '    <i class="fas fa-arrow-up cursor" style="color:#666;" onclick="SessionEditor.moveTrigger(\'' + sectionKey + '\',' + i + ',-1)"></i>';
+            if (i < triggers.length - 1) html += '    <i class="fas fa-arrow-down cursor" style="color:#666;" onclick="SessionEditor.moveTrigger(\'' + sectionKey + '\',' + i + ',1)"></i>';
+            html += '    <i class="fas fa-times cursor" style="color:#c0392b;" onclick="SessionEditor.removeTrigger(\'' + sectionKey + '\',' + i + ')"></i>';
+            html += '  </span>';
+            html += '</div>';
+        }
+        return html;
+    },
+
+    getTriggers: function(sectionKey) {
+        if (SessionEditor.sessionType == 'commercial') return SessionEditor.sessionData.playlist;
+        return SessionEditor.sessionData.sections[sectionKey].triggers;
+    },
+
+    setTriggers: function(sectionKey, triggers) {
+        if (SessionEditor.sessionType == 'commercial') {
+            SessionEditor.sessionData.playlist = triggers;
+        } else {
+            SessionEditor.sessionData.sections[sectionKey].triggers = triggers;
+        }
+    },
+
+    addMedia: function(sectionKey) {
+        if (typeof JellyfinBrowser === 'undefined') {
+            bootbox.alert(_t('Explorateur de bibliothèque non disponible'));
+            return;
+        }
+        // On ouvre le browser avec un callback custom
+        SessionEditor._pendingSection = sectionKey;
+        JellyfinBrowser.open(SessionEditor.eqLogicId, '');
+        // Override temporaire du bouton "Lire maintenant" → "Ajouter à la séance"
+        setTimeout(function() {
+            var $playBtn = $('.jellyfin-modal-fullscreen .btn-success');
+            $playBtn.off('click').html('<i class="fas fa-plus"></i> ' + _t('Ajouter à la séance'));
+            $playBtn.on('click', function() {
+                if (JellyfinBrowser.selectedItem) {
+                    var item = JellyfinBrowser.selectedItem;
+                    // Récupérer la durée depuis les données affichées
+                    var durationTicks = 0;
+                    var durText = $('#sel-duration').text();
+                    // On récupère depuis le résultat brut si dispo
+                    var triggers = SessionEditor.getTriggers(SessionEditor._pendingSection);
+                    triggers.push({
+                        type: 'media',
+                        media_id: item.Id,
+                        name: item.Name,
+                        img_tag: item.ImgTag || '',
+                        duration_ticks: item.RunTimeTicks || 0
+                    });
+                    SessionEditor.setTriggers(SessionEditor._pendingSection, triggers);
+                    SessionEditor.save(function() {
+                        SessionEditor.reload();
+                    });
+                    bootbox.hideAll();
+                } else {
+                    bootbox.alert(_t('Veuillez sélectionner un média.'));
+                }
+                return false;
+            });
+        }, 500);
+    },
+
+    addPause: function(sectionKey) {
+        bootbox.prompt({
+            title: _t('Durée de la pause (secondes, 0 = illimitée)'),
+            value: '0',
+            callback: function(result) {
+                if (result === null) return;
+                var duration = parseInt(result) || 0;
+                var triggers = SessionEditor.getTriggers(sectionKey);
+                triggers.push({ type: 'pause', duration: duration });
+                SessionEditor.setTriggers(sectionKey, triggers);
+                SessionEditor.save(function() { SessionEditor.reload(); });
+            }
+        });
+    },
+
+    addAction: function(sectionKey) {
+        bootbox.dialog({
+            title: _t('Ajouter une action'),
+            message: '<div class="form-group">' +
+                '<label>' + _t('Type') + '</label>' +
+                '<select id="action_type_select" class="form-control">' +
+                '<option value="command">' + _t('Commande équipement') + '</option>' +
+                '<option value="scenario">' + _t('Scénario') + '</option>' +
+                '</select></div>' +
+                '<div class="form-group" id="action_cmd_group">' +
+                '<label>' + _t('Commande') + '</label>' +
+                '<div class="input-group">' +
+                '<input type="text" id="action_cmd_input" class="form-control" readonly placeholder="' + _t('Cliquez pour choisir') + '">' +
+                '<span class="input-group-btn"><button class="btn btn-default" id="action_cmd_pick" type="button"><i class="fas fa-list-alt"></i></button></span>' +
+                '</div></div>' +
+                '<div class="form-group" id="action_scenario_group" style="display:none;">' +
+                '<label>' + _t('Scénario') + '</label>' +
+                '<select id="action_scenario_select" class="form-control"></select>' +
+                '</div>',
+            buttons: {
+                cancel: { label: _t('Annuler'), className: 'btn-default' },
+                confirm: {
+                    label: _t('Ajouter'), className: 'btn-success',
+                    callback: function() {
+                        var actionType = $('#action_type_select').val();
+                        var triggers = SessionEditor.getTriggers(sectionKey);
+                        if (actionType == 'command') {
+                            var cmdId = $('#action_cmd_input').data('cmd_id');
+                            var cmdLabel = $('#action_cmd_input').val();
+                            if (!cmdId) { bootbox.alert(_t('Veuillez sélectionner une commande')); return false; }
+                            triggers.push({ type: 'command', cmd_id: parseInt(cmdId), label: cmdLabel });
+                        } else {
+                            var scenarioId = $('#action_scenario_select').val();
+                            var scenarioLabel = $('#action_scenario_select option:selected').text();
+                            if (!scenarioId) { bootbox.alert(_t('Veuillez sélectionner un scénario')); return false; }
+                            triggers.push({ type: 'scenario', scenario_id: parseInt(scenarioId), label: scenarioLabel });
+                        }
+                        SessionEditor.setTriggers(sectionKey, triggers);
+                        SessionEditor.save(function() { SessionEditor.reload(); });
+                    }
+                }
+            }
+        });
+        // Toggle affichage commande/scénario
+        setTimeout(function() {
+            $('#action_type_select').on('change', function() {
+                if ($(this).val() == 'command') {
+                    $('#action_cmd_group').show();
+                    $('#action_scenario_group').hide();
+                } else {
+                    $('#action_cmd_group').hide();
+                    $('#action_scenario_group').show();
+                }
+            });
+            // Charger les scénarios
+            if (typeof jeedom !== 'undefined') {
+                jeedom.scenario.all({
+                    error: function(e) {},
+                    success: function(scenarios) {
+                        var $sel = $('#action_scenario_select');
+                        $sel.empty().append('<option value="">' + _t('Choisir...') + '</option>');
+                        scenarios.forEach(function(s) { $sel.append('<option value="' + s.id + '">' + s.humanName + '</option>'); });
+                    }
+                });
+            }
+            // Picker commande Jeedom
+            $('#action_cmd_pick').on('click', function() {
+                jeedom.cmd.getSelectModal({ cmd: { type: 'action' } }, function(result) {
+                    $('#action_cmd_input').val(result.human).data('cmd_id', result.cmd.id);
+                });
+            });
+        }, 300);
+    },
+
+    moveTrigger: function(sectionKey, index, direction) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        var newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= triggers.length) return;
+        var tmp = triggers[index];
+        triggers[index] = triggers[newIndex];
+        triggers[newIndex] = tmp;
+        SessionEditor.setTriggers(sectionKey, triggers);
+        SessionEditor.save(function() { SessionEditor.reload(); });
+    },
+
+    removeTrigger: function(sectionKey, index) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        var name = triggers[index].name || triggers[index].label || triggers[index].type;
+        bootbox.confirm(_t('Supprimer') + ' : <b>' + name + '</b> ?', function(ok) {
+            if (!ok) return;
+            triggers.splice(index, 1);
+            SessionEditor.setTriggers(sectionKey, triggers);
+            SessionEditor.save(function() { SessionEditor.reload(); });
+        });
+    },
+
+    toggleSection: function(sectionKey) {
+        var $body = $('.session-section-body[data-section="' + sectionKey + '"]');
+        var $chevron = $body.prev().find('.session-section-chevron');
+        $body.slideToggle(200);
+        $chevron.toggleClass('fa-chevron-right fa-chevron-down');
+    },
+
+    save: function(callback) {
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'save_session_data', id: SessionEditor.eqLogicId, session_data: JSON.stringify(SessionEditor.sessionData) },
+            dataType: 'json',
+            success: function(data) {
+                if (callback) callback();
+            }
+        });
+    },
+
+    reload: function() {
+        SessionEditor.load(SessionEditor.eqLogicId);
+    },
+
+    startSession: function() {
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'start_session', id: SessionEditor.eqLogicId },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state == 'ok') {
+                    $('#div_alert').showAlert({ message: _t('Séance lancée !'), level: 'success' });
+                } else {
+                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                }
+            }
+        });
+    },
+
+    ticksToTime: function(ticks) {
+        if (!ticks) return '0:00';
+        var totalSec = Math.floor(ticks / 10000000);
+        var h = Math.floor(totalSec / 3600);
+        var m = Math.floor((totalSec % 3600) / 60);
+        var s = totalSec % 60;
+        if (h > 0) return h + 'h' + String(m).padStart(2, '0') + 'm' + String(s).padStart(2, '0') + 's';
+        if (m > 0) return m + 'm' + String(s).padStart(2, '0') + 's';
+        return s + 's';
+    },
+
+    calculateDuration: function(triggers) {
+        var totalTicks = 0;
+        for (var i = 0; i < triggers.length; i++) {
+            if (triggers[i].type == 'media' && triggers[i].duration_ticks) {
+                totalTicks += triggers[i].duration_ticks;
+            } else if (triggers[i].type == 'pause' && triggers[i].duration > 0) {
+                totalTicks += triggers[i].duration * 10000000;
+            }
+        }
+        return SessionEditor.ticksToTime(totalTicks);
+    },
+
+    calculateTotalDuration: function() {
+        var totalTicks = 0;
+        if (SessionEditor.sessionType == 'commercial') {
+            var pl = SessionEditor.sessionData.playlist || [];
+            for (var i = 0; i < pl.length; i++) {
+                if (pl[i].duration_ticks) totalTicks += pl[i].duration_ticks;
+            }
+        } else {
+            var order = SessionEditor.sectionsMeta.order;
+            for (var s = 0; s < order.length; s++) {
+                var triggers = (SessionEditor.sessionData.sections[order[s]] || {}).triggers || [];
+                for (var i = 0; i < triggers.length; i++) {
+                    if (triggers[i].type == 'media' && triggers[i].duration_ticks) totalTicks += triggers[i].duration_ticks;
+                    else if (triggers[i].type == 'pause' && triggers[i].duration > 0) totalTicks += triggers[i].duration * 10000000;
+                }
+            }
+        }
+        return SessionEditor.ticksToTime(totalTicks);
+    }
+};
+
+// --- MODALE DE CALIBRAGE DES TOPS ---
+
+var CalibrationModal = {
+    sessionId: null,
+    playerId: null,
+    marks: {},
+    pollInterval: null,
+
+    openFromEditor: function() {
+        if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) {
+            bootbox.alert(_t('Veuillez d\'abord sélectionner un lecteur.'));
+            return;
+        }
+        // Trouver le premier média de la section film
+        var filmSection = SessionEditor.sessionData.sections.film || { triggers: [] };
+        var filmMedia = null;
+        for (var i = 0; i < filmSection.triggers.length; i++) {
+            if (filmSection.triggers[i].type == 'media') {
+                filmMedia = filmSection.triggers[i];
+                break;
+            }
+        }
+        if (!filmMedia) {
+            bootbox.alert(_t('Ajoutez d\'abord un film dans la section Film.'));
+            return;
+        }
+        CalibrationModal.open(SessionEditor.eqLogicId, filmMedia.media_id, filmMedia.name, SessionEditor.sessionData.player_id, filmSection.marks || {});
+    },
+
+    open: function(sessionId, mediaId, mediaName, playerId, existingMarks) {
+        CalibrationModal.sessionId = sessionId;
+        CalibrationModal.playerId = playerId;
+        CalibrationModal.marks = $.extend({}, existingMarks);
+
+        var markLabels = SessionEditor.marksMeta ? SessionEditor.marksMeta.labels : {
+            'pre_generique': 'Pré-générique', 'generique_1': 'Générique 1', 'post_film_1': 'Post film 1',
+            'generique_2': 'Générique 2', 'post_film_2': 'Post film 2', 'fin': 'Fin'
+        };
+        var markOrder = SessionEditor.marksMeta ? SessionEditor.marksMeta.order : ['pre_generique','generique_1','post_film_1','generique_2','post_film_2','fin'];
+
+        var marksHtml = '';
+        for (var i = 0; i < markOrder.length; i++) {
+            var mk = markOrder[i];
+            var val = CalibrationModal.marks[mk];
+            var valStr = (val !== null && val !== undefined) ? CalibrationModal.secondsToTime(val) + ' ✓' : '--:--';
+            marksHtml += '<div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid #333;">';
+            marksHtml += '  <span style="flex-grow:1; color:#ccc;">' + markLabels[mk] + '</span>';
+            marksHtml += '  <span id="mark-val-' + mk + '" style="color:#aaa; font-family:monospace; min-width:80px;">' + valStr + '</span>';
+            marksHtml += '  <button class="btn btn-xs btn-primary" onclick="CalibrationModal.setMark(\'' + mk + '\')">Set</button>';
+            marksHtml += '</div>';
+        }
+
+        var html = '<div style="text-align:center; margin-bottom:15px;">' +
+            '<div style="font-size:24px; font-family:monospace; color:#fff;" id="calib-position">00:00:00</div>' +
+            '<div style="margin:10px 0; height:12px; background:#333; border-radius:6px; cursor:pointer; position:relative;" id="calib-progress-bar">' +
+            '  <div id="calib-progress-fill" style="height:100%; background:#1DB954; border-radius:6px; width:0%; transition:width 0.3s;"></div>' +
+            '</div>' +
+            '<div style="display:flex; justify-content:center; gap:8px; margin-bottom:15px;">' +
+            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(-10)"><i class="fas fa-backward"></i> -10s</button>' +
+            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(-1)"><i class="fas fa-step-backward"></i> -1s</button>' +
+            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.togglePause()"><i class="fas fa-pause" id="calib-pause-icon"></i></button>' +
+            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(1)"><i class="fas fa-step-forward"></i> +1s</button>' +
+            '  <button class="btn btn-sm btn-default" onclick="CalibrationModal.seek(10)"><i class="fas fa-forward"></i> +10s</button>' +
+            '</div></div>' +
+            '<div style="background:#1a1a1a; border-radius:4px; padding:10px;">' + marksHtml + '</div>';
+
+        bootbox.dialog({
+            title: '<i class="fas fa-crosshairs"></i> ' + _t('Calibrage') + ' — ' + mediaName,
+            message: html,
+            className: 'jellyfin-modal-fullscreen',
+            buttons: {
+                cancel: { label: _t('Annuler'), className: 'btn-default', callback: function() { CalibrationModal.close(); } },
+                save: {
+                    label: _t('Valider'), className: 'btn-success',
+                    callback: function() { CalibrationModal.saveAll(); }
+                }
+            }
+        });
+
+        // Seek sur clic barre
+        setTimeout(function() {
+            $('#calib-progress-bar').on('click', function(e) {
+                var pct = (e.pageX - $(this).offset().left) / $(this).width();
+                CalibrationModal.seekTo(pct);
+            });
+        }, 300);
+
+        // Lancer la lecture
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'calibrate_start', id: sessionId, mediaId: mediaId },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state != 'ok') bootbox.alert(_t('Erreur: ') + (data.result || ''));
+            }
+        });
+
+        // Polling position
+        CalibrationModal.pollInterval = setInterval(CalibrationModal.updatePosition, 500);
+    },
+
+    updatePosition: function() {
+        // Lire position depuis les commandes du lecteur
+        var $playerWidget = $('.eqLogic[data-eqLogic_id=' + CalibrationModal.playerId + ']');
+        if ($playerWidget.length == 0) return;
+        var posText = $playerWidget.find('.time-current').text();
+        var totalText = $playerWidget.find('.time-total').text();
+        $('#calib-position').text(posText || '00:00:00');
+        // Barre de progression
+        var posSec = CalibrationModal.timeToSeconds(posText);
+        var totalSec = CalibrationModal.timeToSeconds(totalText);
+        if (totalSec > 0) {
+            $('#calib-progress-fill').css('width', (posSec / totalSec * 100) + '%');
+        }
+    },
+
+    seek: function(delta) {
+        var posText = $('#calib-position').text();
+        var current = CalibrationModal.timeToSeconds(posText);
+        var newPos = Math.max(0, current + delta);
+        jeedom.cmd.execute({
+            id: CalibrationModal.getPlayerCmdId('set_position'),
+            value: { slider: newPos }
+        });
+    },
+
+    seekTo: function(pct) {
+        var $playerWidget = $('.eqLogic[data-eqLogic_id=' + CalibrationModal.playerId + ']');
+        var totalText = $playerWidget.find('.time-total').text();
+        var totalSec = CalibrationModal.timeToSeconds(totalText);
+        if (totalSec <= 0) return;
+        var newPos = Math.floor(pct * totalSec);
+        jeedom.cmd.execute({
+            id: CalibrationModal.getPlayerCmdId('set_position'),
+            value: { slider: newPos }
+        });
+    },
+
+    togglePause: function() {
+        var cmdId = CalibrationModal.getPlayerCmdId('play_pause');
+        if (cmdId) jeedom.cmd.execute({ id: cmdId });
+    },
+
+    setMark: function(markName) {
+        var posText = $('#calib-position').text();
+        var seconds = CalibrationModal.timeToSeconds(posText);
+        CalibrationModal.marks[markName] = seconds;
+        $('#mark-val-' + markName).text(CalibrationModal.secondsToTime(seconds) + ' ✓').css('color', '#1DB954');
+    },
+
+    saveAll: function() {
+        var markOrder = SessionEditor.marksMeta ? SessionEditor.marksMeta.order : ['pre_generique','generique_1','post_film_1','generique_2','post_film_2','fin'];
+        var pending = 0;
+        for (var i = 0; i < markOrder.length; i++) {
+            var mk = markOrder[i];
+            if (CalibrationModal.marks[mk] !== null && CalibrationModal.marks[mk] !== undefined) {
+                pending++;
+                $.ajax({
+                    type: 'POST',
+                    url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                    data: { action: 'calibrate_set_mark', id: CalibrationModal.sessionId, mark_name: mk, position: CalibrationModal.marks[mk] },
+                    dataType: 'json',
+                    success: function() {
+                        pending--;
+                        if (pending <= 0) {
+                            CalibrationModal.close();
+                            SessionEditor.reload();
+                        }
+                    }
+                });
+            }
+        }
+        if (pending == 0) CalibrationModal.close();
+    },
+
+    close: function() {
+        if (CalibrationModal.pollInterval) {
+            clearInterval(CalibrationModal.pollInterval);
+            CalibrationModal.pollInterval = null;
+        }
+    },
+
+    getPlayerCmdId: function(logicalId) {
+        var cmdId = null;
+        // Chercher l'ID commande via le DOM du widget
+        var $widget = $('.eqLogic[data-eqLogic_id=' + CalibrationModal.playerId + ']');
+        if (logicalId == 'set_position') {
+            var onclick = $widget.find('.progress-area').attr('data-set-position-id');
+            if (onclick) return onclick;
+        }
+        // Fallback: chercher dans les cmd-widget
+        $widget.find('.cmd[data-cmd_id]').each(function() {
+            // On ne peut pas facilement trouver le logicalId côté DOM
+            // On utilise l'id passé dans le template
+        });
+        return null;
+    },
+
+    timeToSeconds: function(str) {
+        if (!str || str.indexOf('--') !== -1) return 0;
+        str = String(str).replace(/<[^>]*>?/gm, '').trim();
+        var p = str.split(':'), s = 0, m = 1;
+        while (p.length > 0) { s += m * parseInt(p.pop(), 10); m *= 60; }
+        return isNaN(s) ? 0 : s;
+    },
+
+    secondsToTime: function(sec) {
+        var h = Math.floor(sec / 3600);
+        var m = Math.floor((sec % 3600) / 60);
+        var s = Math.floor(sec % 60);
+        return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    }
+};
