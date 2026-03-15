@@ -343,11 +343,8 @@ if (init('action') == 'add') {
         $mediaId = init('mediaId');
         if (empty($mediaId)) throw new Exception(__('ID média requis', __FILE__));
 
-        $config = jellyfin::getBaseConfig();
-        if (!$config) throw new Exception(__('Configuration Jellyfin incomplète', __FILE__));
-
-        // Retourner l'URL de streaming direct Jellyfin
-        $streamUrl = $config['baseUrl'] . '/Videos/' . $mediaId . '/stream?static=true&api_key=' . $config['apikey'];
+        // URL via proxy local (contourne le mixed content HTTPS/HTTP)
+        $streamUrl = 'plugins/jellyfin/core/php/stream_proxy.php?itemId=' . $mediaId;
         ajax::success(['stream_url' => $streamUrl]);
     }
 
