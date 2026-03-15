@@ -3,6 +3,52 @@ require_once __DIR__ . '/../../../../core/php/core.inc.php';
 
 class jellyfin extends eqLogic {
 
+    /* ************************* Constantes Séances ******************* */
+    const SECTION_ORDER = ['preparation', 'intro', 'pubs', 'trailers', 'short_film', 'audio_trailer', 'film'];
+
+    const SECTION_LABELS = [
+        'preparation'   => 'Préparation',
+        'intro'         => 'Intro',
+        'pubs'          => 'Publicités',
+        'trailers'      => 'Bandes annonces',
+        'short_film'    => 'Court métrage',
+        'audio_trailer' => 'Trailer audio',
+        'film'          => 'Film'
+    ];
+
+    const SECTION_COLORS = [
+        'preparation'   => '#f39c12',
+        'intro'         => '#9b59b6',
+        'pubs'          => '#e74c3c',
+        'trailers'      => '#e67e22',
+        'short_film'    => '#2ecc71',
+        'audio_trailer' => '#3498db',
+        'film'          => '#1DB954'
+    ];
+
+    const MARK_ORDER = ['pre_generique', 'generique_1', 'post_film_1', 'generique_2', 'post_film_2', 'fin'];
+
+    const MARK_LABELS = [
+        'pre_generique' => 'Pré-générique',
+        'generique_1'   => 'Générique 1',
+        'post_film_1'   => 'Post film 1',
+        'generique_2'   => 'Générique 2',
+        'post_film_2'   => 'Post film 2',
+        'fin'           => 'Fin'
+    ];
+
+    const TRIGGER_TYPES = ['media', 'pause', 'command', 'scenario'];
+
+    /* ************************* Helpers ******************* */
+    public static function getBaseConfig() {
+        $ip = config::byKey('jellyfin_ip', 'jellyfin');
+        $port = config::byKey('jellyfin_port', 'jellyfin');
+        $apikey = config::byKey('jellyfin_apikey', 'jellyfin');
+        if (empty($ip) || empty($port) || empty($apikey)) return null;
+        $baseUrl = (strpos($ip, 'http') === false) ? 'http://'.$ip.':'.$port : $ip.':'.$port;
+        return ['baseUrl' => $baseUrl, 'apikey' => $apikey, 'ip' => $ip, 'port' => $port];
+    }
+
     /* ************************* Gestion des Dépendances ******************* */
     public static function dependancy_info() {
         $return = array();
@@ -247,11 +293,16 @@ class jellyfin extends eqLogic {
         // --- NETTOYAGE DES SESSIONS ABSENTES ---
         $allJellyfins = self::byType('jellyfin');
         foreach ($allJellyfins as $jellyfinEq) {
+            // Skip les séances (pas des appareils)
+            if ($jellyfinEq->getConfiguration('session_type') != '') continue;
+
             if ($jellyfinEq->getIsEnable() == 1) {
                 $confDevId = (string)$jellyfinEq->getConfiguration('device_id');
-                
+
                 if (!in_array($confDevId, $activeDevices)) {
-                    $currentStatus = $jellyfinEq->getCmd(null, 'status')->execCmd();
+                    $statusCmd = $jellyfinEq->getCmd(null, 'status');
+                    if (!is_object($statusCmd)) continue;
+                    $currentStatus = $statusCmd->execCmd();
                     if ($currentStatus != 'Stopped') {
                         $jellyfinEq->checkAndUpdateCmd('status', 'Stopped');
                         $jellyfinEq->checkAndUpdateCmd('title', '');
@@ -294,7 +345,13 @@ class jellyfin extends eqLogic {
     }
 
     /* ************************* Commandes *******************************/
-    public function postSave() { $this->createCommands(); }
+    public function postSave() {
+        if ($this->getConfiguration('session_type') != '') {
+            $this->createSessionCommands();
+        } else {
+            $this->createCommands();
+        }
+    }
 
     public function createCommands() {
         $commands = [
@@ -331,6 +388,37 @@ class jellyfin extends eqLogic {
                 if (isset($options['isVisible'])) $cmd->setIsVisible($options['isVisible']);
                 $cmd->save();
             }
+        }
+    }
+
+    public function createSessionCommands() {
+        $commands = [
+            'Start'           => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-play"></i>', 'order' => 1],
+            'Stop'            => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-stop"></i>', 'order' => 2],
+            'Pause'           => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-pause"></i>', 'order' => 3],
+            'Resume'          => ['type' => 'action', 'subtype' => 'other', 'icon' => '<i class="fas fa-redo"></i>', 'order' => 4],
+            'State'           => ['type' => 'info', 'subtype' => 'string', 'order' => 5],
+            'Current_Section' => ['type' => 'info', 'subtype' => 'string', 'order' => 6, 'name' => __('Section en cours', __FILE__)],
+            'Progress'        => ['type' => 'info', 'subtype' => 'numeric', 'order' => 7],
+        ];
+        foreach ($commands as $name => $options) {
+            $logicalId = strtolower($name);
+            $cmd = $this->getCmd(null, $logicalId);
+            if (!is_object($cmd)) {
+                $cmd = new jellyfinCmd();
+                $cmd->setName(isset($options['name']) ? $options['name'] : $name);
+                $cmd->setEqLogic_id($this->getId());
+                $cmd->setLogicalId($logicalId);
+                $cmd->setType($options['type']);
+                $cmd->setSubType($options['subtype']);
+                if (isset($options['order'])) $cmd->setOrder($options['order']);
+                if (isset($options['icon'])) $cmd->setDisplay('icon', $options['icon']);
+                $cmd->save();
+            }
+        }
+        $stateCmd = $this->getCmd('info', 'state');
+        if (is_object($stateCmd) && $stateCmd->execCmd() == '') {
+            $this->checkAndUpdateCmd('state', 'stopped');
         }
     }
 
@@ -576,6 +664,106 @@ public function remoteControl($commandName, $_options = null) {
         return ['state' => 'ok'];
     }
 
+    /* ************************* Gestion Séances ******************* */
+    public function startSession() {
+        log::add('jellyfin', 'info', 'startSession() appelé pour: ' . $this->getName());
+        // Implémenté dans Task 5 (moteur d'exécution)
+        return ['state' => 'ok'];
+    }
+
+    public function stopSession() {
+        log::add('jellyfin', 'info', 'stopSession() appelé pour: ' . $this->getName());
+        $this->checkAndUpdateCmd('state', 'stopped');
+        $this->checkAndUpdateCmd('current_section', '');
+        $this->checkAndUpdateCmd('progress', 0);
+        $sessionData = $this->getConfiguration('session_data');
+        $playerId = is_array($sessionData) ? ($sessionData['player_id'] ?? null) : null;
+        if ($playerId) {
+            cache::set('jellyfin::active_session::' . $playerId, null);
+        }
+        return ['state' => 'ok'];
+    }
+
+    public function pauseSession() {
+        log::add('jellyfin', 'info', 'pauseSession() appelé pour: ' . $this->getName());
+        $this->checkAndUpdateCmd('state', 'paused');
+        return ['state' => 'ok'];
+    }
+
+    public function resumeSession() {
+        log::add('jellyfin', 'info', 'resumeSession() appelé pour: ' . $this->getName());
+        $this->checkAndUpdateCmd('state', 'playing');
+        $sessionData = $this->getConfiguration('session_data');
+        $playerId = is_array($sessionData) ? ($sessionData['player_id'] ?? null) : null;
+        if ($playerId) {
+            $cacheKey = 'jellyfin::active_session::' . $playerId;
+            $engineState = json_decode(cache::byKey($cacheKey)->getValue('{}'), true);
+            if (is_array($engineState)) {
+                unset($engineState['waiting_resume']);
+                unset($engineState['pause_until']);
+                $engineState['current_trigger_index'] = ($engineState['current_trigger_index'] ?? 0) + 1;
+                cache::set($cacheKey, json_encode($engineState));
+            }
+        }
+        return ['state' => 'ok'];
+    }
+
+    public function preRemove() {
+        if ($this->getConfiguration('session_type') != '') {
+            $stateCmd = $this->getCmd('info', 'state');
+            if (is_object($stateCmd) && $stateCmd->execCmd() != 'stopped') {
+                $this->stopSession();
+            }
+            $crons = cron::searchClassAndFunction('jellyfin', 'executeSession', '"session_id":' . $this->getId());
+            if (is_array($crons)) {
+                foreach ($crons as $cron) {
+                    $cron->remove();
+                }
+            }
+        }
+    }
+
+    public static function executeSession($_options) {
+        $sessionId = $_options['session_id'] ?? null;
+        if (empty($sessionId)) return;
+        $eqLogic = self::byId($sessionId);
+        if (is_object($eqLogic) && $eqLogic->getConfiguration('session_type') != '') {
+            $eqLogic->startSession();
+        }
+    }
+
+    public static function getSessionsForPlayer($playerId) {
+        $result = [];
+        $allEq = self::byType('jellyfin');
+        foreach ($allEq as $eq) {
+            if ($eq->getConfiguration('session_type') == '') continue;
+            $sessionData = $eq->getConfiguration('session_data');
+            if (is_array($sessionData) && isset($sessionData['player_id']) && $sessionData['player_id'] == $playerId) {
+                $result[] = $eq;
+            }
+        }
+        return $result;
+    }
+
+    public function getSessionLighting($slot) {
+        $sessionData = $this->getConfiguration('session_data');
+        if (is_array($sessionData) && isset($sessionData['lighting'][$slot]) && !empty($sessionData['lighting'][$slot])) {
+            return $sessionData['lighting'][$slot];
+        }
+        return config::byKey('lighting_' . $slot, 'jellyfin', null);
+    }
+
+    public static function triggerLighting($scenarioId) {
+        if (empty($scenarioId)) return;
+        $scenario = scenario::byId($scenarioId);
+        if (is_object($scenario)) {
+            $scenario->launch();
+            log::add('jellyfin', 'info', 'Ambiance lumineuse déclenchée: scénario #' . $scenarioId);
+        } else {
+            log::add('jellyfin', 'warning', 'Scénario ambiance introuvable: #' . $scenarioId);
+        }
+    }
+
     public function createMediaCommand($mediaId, $mediaName, $imgTag = null) {
         $cleanName = str_replace(' ', '_', $mediaName);
         $cleanName = preg_replace('/[^A-Za-z0-9_]/', '', $cleanName);
@@ -617,7 +805,22 @@ public function remoteControl($commandName, $_options = null) {
 
 class jellyfinCmd extends cmd {
     public function execute($_options = null) {
-        $this->getEqLogic()->remoteControl($this->getLogicalId(), $_options);
+        $eqLogic = $this->getEqLogic();
+        $logicalId = $this->getLogicalId();
+
+        // Commandes de séance
+        if ($eqLogic->getConfiguration('session_type') != '') {
+            switch ($logicalId) {
+                case 'start':  return $eqLogic->startSession();
+                case 'stop':   return $eqLogic->stopSession();
+                case 'pause':  return $eqLogic->pauseSession();
+                case 'resume': return $eqLogic->resumeSession();
+            }
+            return;
+        }
+
+        // Commandes appareil (existant)
+        $eqLogic->remoteControl($logicalId, $_options);
     }
 }
 ?>
