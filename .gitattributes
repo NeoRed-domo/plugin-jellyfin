@@ -1,2 +1,12 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Exclure du package (git archive)
+.gitattributes export-ignore
+.gitignore export-ignore
+.github/ export-ignore
+.superpowers/ export-ignore
+docs/plans/ export-ignore
+docs/specs/ export-ignore
+README.md export-ignore
+LICENSE export-ignore
