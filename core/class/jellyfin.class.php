@@ -1027,7 +1027,7 @@ public function remoteControl($commandName, $_options = null) {
         $launchAt = $engineState['media_launch_at'] ?? 0;
         if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
             // Média terminé → enchaîner immédiatement (pas d'attente)
-            log::add('jellyfin', 'debug', 'Média terminé, enchaînement: ' . $currentMediaId);
+            log::add('jellyfin', 'info', 'STATE3: Média terminé (launchAt=0), enchaînement: ' . $currentMediaId);
             unset($engineState['stopped_since']);
             unset($engineState['stuck_since']);
             unset($engineState['last_position_ticks']);
@@ -1040,6 +1040,7 @@ public function remoteControl($commandName, $_options = null) {
         if (!empty($currentMediaId) && $launchAt > 0 && $status != 'Playing' && $status != 'Paused') {
             $retries = $engineState['launch_retries'] ?? 0;
             $elapsed = $now - $launchAt;
+            log::add('jellyfin', 'debug', 'STATE1: attente lancement ' . $currentMediaId . ' (elapsed=' . $elapsed . 's, retries=' . $retries . ', status=' . $status . ')');
 
             if ($elapsed < self::LAUNCH_TIMEOUT) {
                 cache::set($cacheKey, json_encode($engineState));
@@ -1071,9 +1072,15 @@ public function remoteControl($commandName, $_options = null) {
             // Réinitialiser les compteurs SEULEMENT après confirmation stable (>3s)
             // Évite le cas où le média apparaît brièvement "Playing" puis échoue
             $launchAtState2 = $engineState['media_launch_at'] ?? 0;
-            if ($launchAtState2 > 0 && ($now - $launchAtState2) > 3) {
-                unset($engineState['media_launch_at']);
-                unset($engineState['launch_retries']);
+            if ($launchAtState2 > 0) {
+                $playingSince = $now - $launchAtState2;
+                if ($playingSince > 3) {
+                    unset($engineState['media_launch_at']);
+                    unset($engineState['launch_retries']);
+                    log::add('jellyfin', 'debug', 'STATE2: média confirmé en lecture (' . $playingSince . 's), flags nettoyés');
+                } else {
+                    log::add('jellyfin', 'debug', 'STATE2: média Playing mais pas encore confirmé (' . $playingSince . 's < 3s), flags gardés');
+                }
             }
             unset($engineState['stopped_since']);
 
@@ -1205,15 +1212,10 @@ public function remoteControl($commandName, $_options = null) {
             $previousSection = $engineState['current_section'];
             self::transitionTo($sessionEq, $engineState, $next, $previousSection);
 
-            // Lancer ce média + tous les suivants en playlist
-            $sections = $sessionData['sections'] ?? [];
-            $allMediaIds = [$next['trigger']['media_id']];
-            $remaining = self::collectAllRemainingMediaIds($sections, $next['section'], $next['index']);
-            $allMediaIds = array_merge($allMediaIds, $remaining);
-
-            $launched = self::playMediaPlaylist($playerEq, $allMediaIds, $config);
-            if (!$launched) {
-                log::add('jellyfin', 'error', 'playMediaPlaylist a échoué pour: ' . $next['trigger']['media_id']);
+            // Lancer UN SEUL média (la playlist multi-ItemIds ne fonctionne pas sur ce client)
+            $launched = $playerEq->playMedia($next['trigger']['media_id'], 'play_now');
+            if (isset($launched['error'])) {
+                log::add('jellyfin', 'error', 'playMedia a échoué: ' . $next['trigger']['media_id'] . ' — ' . $launched['error']);
                 $engineState['launch_retries'] = ($engineState['launch_retries'] ?? 0) + 1;
                 if (($engineState['launch_retries'] ?? 0) <= self::MAX_LAUNCH_RETRIES) {
                     self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
@@ -1225,8 +1227,8 @@ public function remoteControl($commandName, $_options = null) {
             }
 
             $engineState['media_launch_at'] = time();
-            $engineState['queued'] = (count($allMediaIds) > 1);
-            log::add('jellyfin', 'info', 'Lancement playlist: ' . count($allMediaIds) . ' médias (section: ' . $next['section'] . '[' . $next['index'] . '])');
+            $engineState['queued'] = false;
+            log::add('jellyfin', 'info', 'Lancement: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . '[' . $next['index'] . '])');
             cache::set($cacheKey, json_encode($engineState));
         } else {
             log::add('jellyfin', 'info', 'Plus de médias à jouer. Fin de séance.');
