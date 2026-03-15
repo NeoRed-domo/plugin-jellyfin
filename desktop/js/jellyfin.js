@@ -608,13 +608,18 @@ var SessionEditor = {
             var count = triggers.length;
             var isOpen = SessionEditor._openSections[key] || false;
 
-            html += '<div class="session-section" data-section="' + key + '">';
-            html += '  <div class="session-section-header" onclick="SessionEditor.toggleSection(\'' + key + '\')" style="cursor:pointer; background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px; margin-bottom:2px; display:flex; align-items:center; gap:10px;">';
-            html += '    <span style="color:' + color + '; font-size:16px;">●</span>';
-            html += '    <span style="color:' + color + '; font-weight:bold; flex-grow:1;">' + label + '</span>';
-            html += '    <span style="color:#888; font-size:12px;">' + count + ' ' + _t('élément(s)') + '</span>';
-            html += '    <span style="color:#aaa; font-size:12px; font-family:monospace;">' + dur + '</span>';
-            html += '    <i class="fas ' + (isOpen ? 'fa-chevron-down' : 'fa-chevron-right') + ' session-section-chevron" style="color:#666; transition:transform 0.2s;"></i>';
+            var sectionEnabled = (section.enabled !== false);
+            var sectionOpacity = sectionEnabled ? '1' : '0.35';
+
+            html += '<div class="session-section" data-section="' + key + '" style="opacity:' + sectionOpacity + ';">';
+            html += '  <div class="session-section-header" style="cursor:pointer; background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px; margin-bottom:2px; display:flex; align-items:center; gap:10px;">';
+            var secToggleIcon = sectionEnabled ? 'fa-toggle-on' : 'fa-toggle-off';
+            var secToggleColor = sectionEnabled ? '#1DB954' : '#555';
+            html += '    <i class="fas ' + secToggleIcon + ' cursor" style="color:' + secToggleColor + '; font-size:16px;" onclick="event.stopPropagation(); SessionEditor.toggleSectionEnabled(\'' + key + '\')" title="' + _t('Activer/Désactiver la section') + '"></i>';
+            html += '    <span onclick="SessionEditor.toggleSection(\'' + key + '\')" style="color:' + color + '; font-weight:bold; flex-grow:1; cursor:pointer;">' + label + '</span>';
+            html += '    <span onclick="SessionEditor.toggleSection(\'' + key + '\')" style="color:#888; font-size:12px; cursor:pointer;">' + count + ' ' + _t('élément(s)') + '</span>';
+            html += '    <span onclick="SessionEditor.toggleSection(\'' + key + '\')" style="color:#aaa; font-size:12px; font-family:monospace; cursor:pointer;">' + dur + '</span>';
+            html += '    <i class="fas ' + (isOpen ? 'fa-chevron-down' : 'fa-chevron-right') + ' session-section-chevron" style="color:#666; transition:transform 0.2s; cursor:pointer;" onclick="SessionEditor.toggleSection(\'' + key + '\')"></i>';
             html += '  </div>';
             html += '  <div class="session-section-body" data-section="' + key + '" style="' + (isOpen ? '' : 'display:none;') + ' border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; margin-bottom:8px; background:#222;">';
             html += SessionEditor.renderTriggerList(triggers, key);
@@ -753,13 +758,13 @@ var SessionEditor = {
                 if (t.duration_ticks) durStr = SessionEditor.ticksToTime(t.duration_ticks);
             } else if (t.type == 'pause') {
                 icon = '<i class="fas fa-pause-circle" style="color:#f39c12;"></i>';
-                label = t.duration > 0 ? _t('Pause') + ' ' + t.duration + 's' : _t('Pause illimitée');
+                label = '<span class="cursor" onclick="event.stopPropagation(); SessionEditor.editPause(\'' + sectionKey + '\',' + i + ')" title="' + _t('Cliquer pour modifier') + '">' + (t.duration > 0 ? _t('Pause') + ' ' + t.duration + 's' : _t('Pause illimitée')) + ' <i class="fas fa-pen" style="font-size:9px; color:#666;"></i></span>';
             } else if (t.type == 'command') {
                 icon = '<i class="fas fa-bolt" style="color:#e74c3c;"></i>';
-                label = t.label || (_t('Commande') + ' #' + t.cmd_id);
+                label = '<span class="cursor" onclick="event.stopPropagation(); SessionEditor.editCommand(\'' + sectionKey + '\',' + i + ')" title="' + _t('Cliquer pour modifier') + '">' + (t.label || (_t('Commande') + ' #' + t.cmd_id)) + ' <i class="fas fa-pen" style="font-size:9px; color:#666;"></i></span>';
             } else if (t.type == 'scenario') {
                 icon = '<i class="fas fa-cogs" style="color:#9b59b6;"></i>';
-                label = t.label || (_t('Scénario') + ' #' + t.scenario_id);
+                label = '<span class="cursor" onclick="event.stopPropagation(); SessionEditor.editScenario(\'' + sectionKey + '\',' + i + ')" title="' + _t('Cliquer pour modifier') + '">' + (t.label || (_t('Scénario') + ' #' + t.scenario_id)) + ' <i class="fas fa-pen" style="font-size:9px; color:#666;"></i></span>';
             }
             var toggleIcon = isEnabled ? 'fa-toggle-on' : 'fa-toggle-off';
             var toggleColor = isEnabled ? '#1DB954' : '#555';
@@ -1064,6 +1069,95 @@ var SessionEditor = {
         });
     },
 
+    editPause: function(sectionKey, index) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        var t = triggers[index];
+        bootbox.prompt({
+            title: _t('Durée de la pause (secondes, 0 = illimitée)'),
+            value: String(t.duration || 0),
+            callback: function(result) {
+                if (result === null) return;
+                triggers[index].duration = parseInt(result) || 0;
+                SessionEditor.setTriggers(sectionKey, triggers);
+                SessionEditor.save(function() { SessionEditor.reload(); });
+            }
+        });
+    },
+
+    editCommand: function(sectionKey, index) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        var $bootboxModal = null;
+        bootbox.dialog({
+            title: _t('Modifier la commande'),
+            message: '<div class="input-group">' +
+                '<input type="text" id="edit_cmd_input" class="form-control" value="' + (triggers[index].label || '').replace(/"/g, '&quot;') + '" readonly>' +
+                '<span class="input-group-btn"><button class="btn btn-default" id="edit_cmd_pick" type="button"><i class="fas fa-list-alt"></i></button></span>' +
+                '</div>',
+            buttons: {
+                cancel: { label: _t('Annuler'), className: 'btn-default' },
+                confirm: { label: _t('Valider'), className: 'btn-success', callback: function() {
+                    var cmdId = $('#edit_cmd_input').data('cmd_id');
+                    if (cmdId) {
+                        triggers[index].cmd_id = parseInt(cmdId);
+                        triggers[index].label = $('#edit_cmd_input').val();
+                        SessionEditor.setTriggers(sectionKey, triggers);
+                        SessionEditor.save(function() { SessionEditor.reload(); });
+                    }
+                }}
+            }
+        });
+        setTimeout(function() {
+            $('#edit_cmd_pick').on('click', function() {
+                var $modal = $(this).closest('.modal');
+                $modal.css('z-index', 0);
+                jeedom.cmd.getSelectModal({ cmd: { type: 'action' } }, function(result) {
+                    $('#edit_cmd_input').val(result.human).data('cmd_id', result.cmd.id);
+                    $modal.css('z-index', '');
+                });
+            });
+        }, 300);
+    },
+
+    editScenario: function(sectionKey, index) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        bootbox.dialog({
+            title: _t('Modifier le scénario'),
+            message: '<select id="edit_scenario_select" class="form-control"></select>',
+            buttons: {
+                cancel: { label: _t('Annuler'), className: 'btn-default' },
+                confirm: { label: _t('Valider'), className: 'btn-success', callback: function() {
+                    var scenarioId = $('#edit_scenario_select').val();
+                    if (scenarioId) {
+                        triggers[index].scenario_id = parseInt(scenarioId);
+                        triggers[index].label = $('#edit_scenario_select option:selected').text();
+                        SessionEditor.setTriggers(sectionKey, triggers);
+                        SessionEditor.save(function() { SessionEditor.reload(); });
+                    }
+                }}
+            }
+        });
+        setTimeout(function() {
+            jeedom.scenario.all({
+                success: function(scenarios) {
+                    var $sel = $('#edit_scenario_select');
+                    $sel.empty();
+                    scenarios.forEach(function(s) {
+                        var selected = (s.id == triggers[index].scenario_id) ? ' selected' : '';
+                        $sel.append('<option value="' + s.id + '"' + selected + '>' + s.humanName + '</option>');
+                    });
+                }
+            });
+        }, 300);
+    },
+
+    toggleSectionEnabled: function(sectionKey) {
+        if (!SessionEditor.sessionData || !SessionEditor.sessionData.sections) return;
+        var section = SessionEditor.sessionData.sections[sectionKey];
+        if (!section) return;
+        section.enabled = (section.enabled === false) ? true : false;
+        SessionEditor.save(function() { SessionEditor.reload(); });
+    },
+
     resetMark: function(markName) {
         if (!SessionEditor.sessionData || !SessionEditor.sessionData.sections || !SessionEditor.sessionData.sections.film) return;
         SessionEditor.sessionData.sections.film.marks[markName] = null;
@@ -1150,7 +1244,9 @@ var SessionEditor = {
         } else {
             var order = SessionEditor.sectionsMeta.order;
             for (var s = 0; s < order.length; s++) {
-                var triggers = (SessionEditor.sessionData.sections[order[s]] || {}).triggers || [];
+                var sec = SessionEditor.sessionData.sections[order[s]] || {};
+                if (sec.enabled === false) continue;
+                var triggers = sec.triggers || [];
                 for (var i = 0; i < triggers.length; i++) {
                     if (triggers[i].enabled === false) continue;
                     if (triggers[i].type == 'media' && triggers[i].duration_ticks) totalTicks += triggers[i].duration_ticks;

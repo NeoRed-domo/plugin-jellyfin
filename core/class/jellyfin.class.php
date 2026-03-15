@@ -714,7 +714,9 @@ public function remoteControl($commandName, $_options = null) {
         $firstSection = '';
         if ($sessionType == 'cinema') {
             foreach (self::SECTION_ORDER as $key) {
-                if (!empty($sessionData['sections'][$key]['triggers'])) {
+                $sec = $sessionData['sections'][$key] ?? [];
+                if (isset($sec['enabled']) && $sec['enabled'] === false) continue;
+                if (!empty($sec['triggers'])) {
                     $firstSection = $key;
                     break;
                 }
@@ -1418,7 +1420,9 @@ public function remoteControl($commandName, $_options = null) {
 
         for ($s = $sectionIdx + 1; $s < count($sectionOrder); $s++) {
             $secKey = $sectionOrder[$s];
-            foreach ($sections[$secKey]['triggers'] ?? [] as $idx => $trigger) {
+            $sec = $sections[$secKey] ?? [];
+            if (isset($sec['enabled']) && $sec['enabled'] === false) continue; // Section désactivée
+            foreach ($sec['triggers'] ?? [] as $idx => $trigger) {
                 if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
                     return ['trigger' => $trigger, 'section' => $secKey, 'index' => $idx];
                 }
@@ -1464,7 +1468,9 @@ public function remoteControl($commandName, $_options = null) {
 
         for ($s = $sectionIdx + 1; $s < count($sectionOrder); $s++) {
             $secKey = $sectionOrder[$s];
-            foreach ($sections[$secKey]['triggers'] ?? [] as $trigger) {
+            $sec = $sections[$secKey] ?? [];
+            if (isset($sec['enabled']) && $sec['enabled'] === false) continue;
+            foreach ($sec['triggers'] ?? [] as $trigger) {
                 if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
                     $mediaIds[] = $trigger['media_id'];
                 }
@@ -1531,7 +1537,9 @@ public function remoteControl($commandName, $_options = null) {
 
         for ($i = $currentIdx + 1; $i < count($sectionOrder); $i++) {
             $nextKey = $sectionOrder[$i];
-            $nextTriggers = $sessionData['sections'][$nextKey]['triggers'] ?? [];
+            $nextSection = $sessionData['sections'][$nextKey] ?? [];
+            if (isset($nextSection['enabled']) && $nextSection['enabled'] === false) continue; // Section désactivée
+            $nextTriggers = $nextSection['triggers'] ?? [];
             if (!empty($nextTriggers)) {
                 $engineState['current_section'] = $nextKey;
                 $engineState['current_trigger_index'] = 0;
