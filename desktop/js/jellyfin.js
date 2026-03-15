@@ -1007,19 +1007,18 @@ var CalibrationModal = {
         CalibrationModal.currentPositionSec = 0;
         CalibrationModal.totalDurationSec = 0;
 
-        // Charger les IDs des commandes du lecteur via l'API Jeedom
-        jeedom.eqLogic.byId({
-            id: playerId,
-            error: function(e) { bootbox.alert(_t('Erreur: ') + e.message); },
-            success: function(eqLogic) {
-                if (!eqLogic || !eqLogic.cmds) {
-                    bootbox.alert(_t('Lecteur introuvable'));
+        // Charger les IDs des commandes du lecteur via notre AJAX
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'get_player_cmd_ids', player_id: playerId },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state != 'ok') {
+                    bootbox.alert(_t('Erreur: ') + (data.result || ''));
                     return;
                 }
-                // Indexer les commandes par logicalId
-                eqLogic.cmds.forEach(function(cmd) {
-                    if (cmd.logicalId) CalibrationModal.cmdIds[cmd.logicalId] = cmd.id;
-                });
+                CalibrationModal.cmdIds = data.result;
                 CalibrationModal._openModal(sessionId, mediaId, mediaName, existingMarks);
             }
         });
@@ -1096,48 +1095,65 @@ var CalibrationModal = {
     },
 
     updatePosition: function() {
-        var posCmdId = CalibrationModal.cmdIds['position'];
-        var durCmdId = CalibrationModal.cmdIds['duration'];
-        if (!posCmdId || !durCmdId) return;
-
-        // Lire position et durée via l'API commandes Jeedom
-        jeedom.cmd.execute({id: posCmdId, notify: false, success: function(posVal) {
-            var posText = (typeof posVal === 'object') ? posVal.value : posVal;
-            CalibrationModal.currentPositionSec = CalibrationModal.timeToSeconds(posText);
-            $('#calib-position').text(posText || '00:00:00');
-
-            jeedom.cmd.execute({id: durCmdId, notify: false, success: function(durVal) {
-                var durText = (typeof durVal === 'object') ? durVal.value : durVal;
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'get_player_position', player_id: CalibrationModal.playerId },
+            dataType: 'json',
+            global: false,
+            success: function(data) {
+                if (data.state != 'ok') return;
+                var posText = data.result.position || '--:--';
+                var durText = data.result.duration || '--:--';
+                CalibrationModal.currentPositionSec = CalibrationModal.timeToSeconds(posText);
                 CalibrationModal.totalDurationSec = CalibrationModal.timeToSeconds(durText);
-                $('#calib-total').text('/ ' + (durText || '--:--:--'));
+                $('#calib-position').text(posText);
+                $('#calib-total').text('/ ' + durText);
                 if (CalibrationModal.totalDurationSec > 0) {
                     var pct = (CalibrationModal.currentPositionSec / CalibrationModal.totalDurationSec) * 100;
                     $('#calib-progress-fill').css('width', pct + '%');
                 }
-            }});
-        }});
+            }
+        });
     },
 
     seek: function(delta) {
         var newPos = Math.max(0, CalibrationModal.currentPositionSec + delta);
         var cmdId = CalibrationModal.cmdIds['set_position'];
-        if (cmdId) {
-            jeedom.cmd.execute({ id: cmdId, value: { slider: newPos } });
-        }
+        if (!cmdId) return;
+        $.ajax({
+            type: 'POST',
+            url: 'core/ajax/cmd.ajax.php',
+            data: { action: 'execCmd', id: cmdId, value: JSON.stringify({slider: newPos}) },
+            dataType: 'json',
+            global: false
+        });
     },
 
     seekTo: function(pct) {
         if (CalibrationModal.totalDurationSec <= 0) return;
         var newPos = Math.floor(pct * CalibrationModal.totalDurationSec);
         var cmdId = CalibrationModal.cmdIds['set_position'];
-        if (cmdId) {
-            jeedom.cmd.execute({ id: cmdId, value: { slider: newPos } });
-        }
+        if (!cmdId) return;
+        $.ajax({
+            type: 'POST',
+            url: 'core/ajax/cmd.ajax.php',
+            data: { action: 'execCmd', id: cmdId, value: JSON.stringify({slider: newPos}) },
+            dataType: 'json',
+            global: false
+        });
     },
 
     togglePause: function() {
         var cmdId = CalibrationModal.cmdIds['play_pause'];
-        if (cmdId) jeedom.cmd.execute({ id: cmdId });
+        if (!cmdId) return;
+        $.ajax({
+            type: 'POST',
+            url: 'core/ajax/cmd.ajax.php',
+            data: { action: 'execCmd', id: cmdId },
+            dataType: 'json',
+            global: false
+        });
     },
 
     setMark: function(markName) {

@@ -310,6 +310,31 @@ if (init('action') == 'add') {
         ajax::success(['scheduled' => $datetime]);
     }
 
+    if (init('action') == 'get_player_cmd_ids') {
+        $player = jellyfin::byId(init('player_id'));
+        if (!is_object($player) || $player->getConfiguration('session_type') != '') {
+            throw new Exception(__('Lecteur introuvable', __FILE__));
+        }
+        $cmds = [];
+        foreach ($player->getCmd() as $cmd) {
+            $cmds[$cmd->getLogicalId()] = $cmd->getId();
+        }
+        ajax::success($cmds);
+    }
+
+    if (init('action') == 'get_player_position') {
+        $player = jellyfin::byId(init('player_id'));
+        if (!is_object($player) || $player->getConfiguration('session_type') != '') {
+            throw new Exception(__('Lecteur introuvable', __FILE__));
+        }
+        $posCmd = $player->getCmd('info', 'position');
+        $durCmd = $player->getCmd('info', 'duration');
+        ajax::success([
+            'position' => is_object($posCmd) ? $posCmd->execCmd() : '--:--',
+            'duration' => is_object($durCmd) ? $durCmd->execCmd() : '--:--'
+        ]);
+    }
+
     if (init('action') == 'calibrate_start') {
         $eqLogic = jellyfin::byId(init('id'));
         if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') != 'cinema') {
