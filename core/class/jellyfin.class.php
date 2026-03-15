@@ -1115,13 +1115,13 @@ public function remoteControl($commandName, $_options = null) {
 
         $triggers = $sections[$currentSection]['triggers'] ?? [];
         for ($i = $currentIndex + 1; $i < count($triggers); $i++) {
-            if ($triggers[$i]['type'] == 'media') return $triggers[$i];
+            if ($triggers[$i]['type'] == 'media' && (!isset($triggers[$i]['enabled']) || $triggers[$i]['enabled'] !== false)) return $triggers[$i];
         }
 
         for ($s = $sectionIdx + 1; $s < count($sectionOrder); $s++) {
             $secKey = $sectionOrder[$s];
             foreach ($sections[$secKey]['triggers'] ?? [] as $trigger) {
-                if ($trigger['type'] == 'media') return $trigger;
+                if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) return $trigger;
             }
         }
         return null;
@@ -1195,6 +1195,12 @@ public function remoteControl($commandName, $_options = null) {
 
         while ($engineState['current_trigger_index'] < count($triggers)) {
             $trigger = $triggers[$engineState['current_trigger_index']];
+
+            // Skip triggers désactivés
+            if (isset($trigger['enabled']) && $trigger['enabled'] === false) {
+                $engineState['current_trigger_index']++;
+                continue;
+            }
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];

@@ -563,6 +563,7 @@ var SessionEditor = {
     sessionData: null,
     sectionsMeta: null,
     marksMeta: null,
+    _openSections: {},
 
     load: function(eqLogicId) {
         SessionEditor.eqLogicId = eqLogicId;
@@ -604,6 +605,7 @@ var SessionEditor = {
             var label = labels[key] || key;
             var dur = SessionEditor.calculateDuration(triggers);
             var count = triggers.length;
+            var isOpen = SessionEditor._openSections[key] || false;
 
             html += '<div class="session-section" data-section="' + key + '">';
             html += '  <div class="session-section-header" onclick="SessionEditor.toggleSection(\'' + key + '\')" style="cursor:pointer; background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px; margin-bottom:2px; display:flex; align-items:center; gap:10px;">';
@@ -611,9 +613,9 @@ var SessionEditor = {
             html += '    <span style="color:' + color + '; font-weight:bold; flex-grow:1;">' + label + '</span>';
             html += '    <span style="color:#888; font-size:12px;">' + count + ' ' + _t('élément(s)') + '</span>';
             html += '    <span style="color:#aaa; font-size:12px; font-family:monospace;">' + dur + '</span>';
-            html += '    <i class="fas fa-chevron-right session-section-chevron" style="color:#666; transition:transform 0.2s;"></i>';
+            html += '    <i class="fas ' + (isOpen ? 'fa-chevron-down' : 'fa-chevron-right') + ' session-section-chevron" style="color:#666; transition:transform 0.2s;"></i>';
             html += '  </div>';
-            html += '  <div class="session-section-body" data-section="' + key + '" style="display:none; border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; margin-bottom:8px; background:#222;">';
+            html += '  <div class="session-section-body" data-section="' + key + '" style="' + (isOpen ? '' : 'display:none;') + ' border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; margin-bottom:8px; background:#222;">';
             html += SessionEditor.renderTriggerList(triggers, key);
             html += '    <div style="margin-top:8px; display:flex; gap:6px;">';
             html += '      <button class="btn btn-xs btn-primary" onclick="SessionEditor.addMedia(\'' + key + '\')"><i class="fas fa-film"></i> ' + _t('Média') + '</button>';
@@ -669,6 +671,8 @@ var SessionEditor = {
         var html = '';
         for (var i = 0; i < triggers.length; i++) {
             var t = triggers[i];
+            var isEnabled = (t.enabled !== false);
+            var opacity = isEnabled ? '1' : '0.35';
             var icon = '', label = '', durStr = '';
             if (t.type == 'media') {
                 icon = '<i class="fas fa-film" style="color:#3498db;"></i>';
@@ -684,7 +688,10 @@ var SessionEditor = {
                 icon = '<i class="fas fa-cogs" style="color:#9b59b6;"></i>';
                 label = t.label || (_t('Scénario') + ' #' + t.scenario_id);
             }
-            html += '<div style="background:#1a1a1a; padding:6px 10px; border-radius:3px; margin-bottom:3px; display:flex; align-items:center; gap:8px; font-size:12px; color:#ccc;">';
+            var toggleIcon = isEnabled ? 'fa-toggle-on' : 'fa-toggle-off';
+            var toggleColor = isEnabled ? '#1DB954' : '#555';
+            html += '<div style="background:#1a1a1a; padding:6px 10px; border-radius:3px; margin-bottom:3px; display:flex; align-items:center; gap:8px; font-size:12px; color:#ccc; opacity:' + opacity + ';">';
+            html += '  <i class="fas ' + toggleIcon + ' cursor" style="color:' + toggleColor + '; font-size:14px;" onclick="SessionEditor.toggleTrigger(\'' + sectionKey + '\',' + i + ')" title="' + _t('Activer/Désactiver') + '"></i>';
             html += '  ' + icon + ' <span style="flex-grow:1;">' + label + '</span>';
             if (durStr) html += '  <span style="color:#666; font-size:11px;">' + durStr + '</span>';
             html += '  <span style="display:flex; gap:3px;">';
@@ -695,6 +702,13 @@ var SessionEditor = {
             html += '</div>';
         }
         return html;
+    },
+
+    toggleTrigger: function(sectionKey, index) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        triggers[index].enabled = (triggers[index].enabled === false) ? true : false;
+        SessionEditor.setTriggers(sectionKey, triggers);
+        SessionEditor.save(function() { SessionEditor.reload(); });
     },
 
     getTriggers: function(sectionKey) {
@@ -869,6 +883,8 @@ var SessionEditor = {
     toggleSection: function(sectionKey) {
         var $body = $('.session-section-body[data-section="' + sectionKey + '"]');
         var $chevron = $body.prev().find('.session-section-chevron');
+        var isVisible = $body.is(':visible');
+        SessionEditor._openSections[sectionKey] = !isVisible;
         $body.slideToggle(200);
         $chevron.toggleClass('fa-chevron-right fa-chevron-down');
     },
@@ -919,6 +935,7 @@ var SessionEditor = {
     calculateDuration: function(triggers) {
         var totalTicks = 0;
         for (var i = 0; i < triggers.length; i++) {
+            if (triggers[i].enabled === false) continue;
             if (triggers[i].type == 'media' && triggers[i].duration_ticks) {
                 totalTicks += triggers[i].duration_ticks;
             } else if (triggers[i].type == 'pause' && triggers[i].duration > 0) {
@@ -933,6 +950,7 @@ var SessionEditor = {
         if (SessionEditor.sessionType == 'commercial') {
             var pl = SessionEditor.sessionData.playlist || [];
             for (var i = 0; i < pl.length; i++) {
+                if (pl[i].enabled === false) continue;
                 if (pl[i].duration_ticks) totalTicks += pl[i].duration_ticks;
             }
         } else {
@@ -940,6 +958,7 @@ var SessionEditor = {
             for (var s = 0; s < order.length; s++) {
                 var triggers = (SessionEditor.sessionData.sections[order[s]] || {}).triggers || [];
                 for (var i = 0; i < triggers.length; i++) {
+                    if (triggers[i].enabled === false) continue;
                     if (triggers[i].type == 'media' && triggers[i].duration_ticks) totalTicks += triggers[i].duration_ticks;
                     else if (triggers[i].type == 'pause' && triggers[i].duration > 0) totalTicks += triggers[i].duration * 10000000;
                 }
@@ -956,13 +975,15 @@ var CalibrationModal = {
     playerId: null,
     marks: {},
     pollInterval: null,
+    cmdIds: {},
+    currentPositionSec: 0,
+    totalDurationSec: 0,
 
     openFromEditor: function() {
         if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) {
             bootbox.alert(_t('Veuillez d\'abord sélectionner un lecteur.'));
             return;
         }
-        // Trouver le premier média de la section film
         var filmSection = SessionEditor.sessionData.sections.film || { triggers: [] };
         var filmMedia = null;
         for (var i = 0; i < filmSection.triggers.length; i++) {
@@ -982,7 +1003,29 @@ var CalibrationModal = {
         CalibrationModal.sessionId = sessionId;
         CalibrationModal.playerId = playerId;
         CalibrationModal.marks = $.extend({}, existingMarks);
+        CalibrationModal.cmdIds = {};
+        CalibrationModal.currentPositionSec = 0;
+        CalibrationModal.totalDurationSec = 0;
 
+        // Charger les IDs des commandes du lecteur via l'API Jeedom
+        jeedom.eqLogic.byId({
+            id: playerId,
+            error: function(e) { bootbox.alert(_t('Erreur: ') + e.message); },
+            success: function(eqLogic) {
+                if (!eqLogic || !eqLogic.cmds) {
+                    bootbox.alert(_t('Lecteur introuvable'));
+                    return;
+                }
+                // Indexer les commandes par logicalId
+                eqLogic.cmds.forEach(function(cmd) {
+                    if (cmd.logicalId) CalibrationModal.cmdIds[cmd.logicalId] = cmd.id;
+                });
+                CalibrationModal._openModal(sessionId, mediaId, mediaName, existingMarks);
+            }
+        });
+    },
+
+    _openModal: function(sessionId, mediaId, mediaName, existingMarks) {
         var markLabels = SessionEditor.marksMeta ? SessionEditor.marksMeta.labels : {
             'pre_generique': 'Pré-générique', 'generique_1': 'Générique 1', 'post_film_1': 'Post film 1',
             'generique_2': 'Générique 2', 'post_film_2': 'Post film 2', 'fin': 'Fin'
@@ -1003,6 +1046,7 @@ var CalibrationModal = {
 
         var html = '<div style="text-align:center; margin-bottom:15px;">' +
             '<div style="font-size:24px; font-family:monospace; color:#fff;" id="calib-position">00:00:00</div>' +
+            '<div style="font-size:11px; color:#666; font-family:monospace;" id="calib-total">/ --:--:--</div>' +
             '<div style="margin:10px 0; height:12px; background:#333; border-radius:6px; cursor:pointer; position:relative;" id="calib-progress-bar">' +
             '  <div id="calib-progress-fill" style="height:100%; background:#1DB954; border-radius:6px; width:0%; transition:width 0.3s;"></div>' +
             '</div>' +
@@ -1047,57 +1091,58 @@ var CalibrationModal = {
             }
         });
 
-        // Polling position
+        // Polling position via API Jeedom (pas via DOM widget)
         CalibrationModal.pollInterval = setInterval(CalibrationModal.updatePosition, 500);
     },
 
     updatePosition: function() {
-        // Lire position depuis les commandes du lecteur
-        var $playerWidget = $('.eqLogic[data-eqLogic_id=' + CalibrationModal.playerId + ']');
-        if ($playerWidget.length == 0) return;
-        var posText = $playerWidget.find('.time-current').text();
-        var totalText = $playerWidget.find('.time-total').text();
-        $('#calib-position').text(posText || '00:00:00');
-        // Barre de progression
-        var posSec = CalibrationModal.timeToSeconds(posText);
-        var totalSec = CalibrationModal.timeToSeconds(totalText);
-        if (totalSec > 0) {
-            $('#calib-progress-fill').css('width', (posSec / totalSec * 100) + '%');
-        }
+        var posCmdId = CalibrationModal.cmdIds['position'];
+        var durCmdId = CalibrationModal.cmdIds['duration'];
+        if (!posCmdId || !durCmdId) return;
+
+        // Lire position et durée via l'API commandes Jeedom
+        jeedom.cmd.execute({id: posCmdId, notify: false, success: function(posVal) {
+            var posText = (typeof posVal === 'object') ? posVal.value : posVal;
+            CalibrationModal.currentPositionSec = CalibrationModal.timeToSeconds(posText);
+            $('#calib-position').text(posText || '00:00:00');
+
+            jeedom.cmd.execute({id: durCmdId, notify: false, success: function(durVal) {
+                var durText = (typeof durVal === 'object') ? durVal.value : durVal;
+                CalibrationModal.totalDurationSec = CalibrationModal.timeToSeconds(durText);
+                $('#calib-total').text('/ ' + (durText || '--:--:--'));
+                if (CalibrationModal.totalDurationSec > 0) {
+                    var pct = (CalibrationModal.currentPositionSec / CalibrationModal.totalDurationSec) * 100;
+                    $('#calib-progress-fill').css('width', pct + '%');
+                }
+            }});
+        }});
     },
 
     seek: function(delta) {
-        var posText = $('#calib-position').text();
-        var current = CalibrationModal.timeToSeconds(posText);
-        var newPos = Math.max(0, current + delta);
-        jeedom.cmd.execute({
-            id: CalibrationModal.getPlayerCmdId('set_position'),
-            value: { slider: newPos }
-        });
+        var newPos = Math.max(0, CalibrationModal.currentPositionSec + delta);
+        var cmdId = CalibrationModal.cmdIds['set_position'];
+        if (cmdId) {
+            jeedom.cmd.execute({ id: cmdId, value: { slider: newPos } });
+        }
     },
 
     seekTo: function(pct) {
-        var $playerWidget = $('.eqLogic[data-eqLogic_id=' + CalibrationModal.playerId + ']');
-        var totalText = $playerWidget.find('.time-total').text();
-        var totalSec = CalibrationModal.timeToSeconds(totalText);
-        if (totalSec <= 0) return;
-        var newPos = Math.floor(pct * totalSec);
-        jeedom.cmd.execute({
-            id: CalibrationModal.getPlayerCmdId('set_position'),
-            value: { slider: newPos }
-        });
+        if (CalibrationModal.totalDurationSec <= 0) return;
+        var newPos = Math.floor(pct * CalibrationModal.totalDurationSec);
+        var cmdId = CalibrationModal.cmdIds['set_position'];
+        if (cmdId) {
+            jeedom.cmd.execute({ id: cmdId, value: { slider: newPos } });
+        }
     },
 
     togglePause: function() {
-        var cmdId = CalibrationModal.getPlayerCmdId('play_pause');
+        var cmdId = CalibrationModal.cmdIds['play_pause'];
         if (cmdId) jeedom.cmd.execute({ id: cmdId });
     },
 
     setMark: function(markName) {
-        var posText = $('#calib-position').text();
-        var seconds = CalibrationModal.timeToSeconds(posText);
-        CalibrationModal.marks[markName] = seconds;
-        $('#mark-val-' + markName).text(CalibrationModal.secondsToTime(seconds) + ' ✓').css('color', '#1DB954');
+        CalibrationModal.marks[markName] = CalibrationModal.currentPositionSec;
+        $('#mark-val-' + markName).text(CalibrationModal.secondsToTime(CalibrationModal.currentPositionSec) + ' ✓').css('color', '#1DB954');
     },
 
     saveAll: function() {
@@ -1130,22 +1175,6 @@ var CalibrationModal = {
             clearInterval(CalibrationModal.pollInterval);
             CalibrationModal.pollInterval = null;
         }
-    },
-
-    getPlayerCmdId: function(logicalId) {
-        var cmdId = null;
-        // Chercher l'ID commande via le DOM du widget
-        var $widget = $('.eqLogic[data-eqLogic_id=' + CalibrationModal.playerId + ']');
-        if (logicalId == 'set_position') {
-            var onclick = $widget.find('.progress-area').attr('data-set-position-id');
-            if (onclick) return onclick;
-        }
-        // Fallback: chercher dans les cmd-widget
-        $widget.find('.cmd[data-cmd_id]').each(function() {
-            // On ne peut pas facilement trouver le logicalId côté DOM
-            // On utilise l'id passé dans le template
-        });
-        return null;
     },
 
     timeToSeconds: function(str) {
