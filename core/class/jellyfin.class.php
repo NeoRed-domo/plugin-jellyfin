@@ -1077,9 +1077,6 @@ public function remoteControl($commandName, $_options = null) {
                 if ($playingSince > 3) {
                     unset($engineState['media_launch_at']);
                     unset($engineState['launch_retries']);
-                    log::add('jellyfin', 'debug', 'STATE2: média confirmé en lecture (' . $playingSince . 's), flags nettoyés');
-                } else {
-                    log::add('jellyfin', 'debug', 'STATE2: média Playing mais pas encore confirmé (' . $playingSince . 's < 3s), flags gardés');
                 }
             }
             unset($engineState['stopped_since']);
@@ -1460,16 +1457,6 @@ public function remoteControl($commandName, $_options = null) {
         $url = $config['baseUrl'] . '/Sessions/' . $jellyfinSessionId . '/Playing/NextTrack?api_key=' . $config['apikey'];
         self::requestApi($url, 'POST', null, false, 2);
         log::add('jellyfin', 'debug', 'NextTrack envoyé');
-    }
-
-    private static function playMediaDirect($playerEq, $mediaId, $config) {
-        $deviceId = $playerEq->getConfiguration('device_id');
-        $sessionData = self::getSessionDataFromDeviceId($config['baseUrl'], $config['apikey'], $deviceId);
-        if (!$sessionData || !isset($sessionData['Id'])) return false;
-        $url = $config['baseUrl'] . '/Sessions/' . $sessionData['Id'] . '/Playing?ItemIds=' . $mediaId . '&PlayCommand=PlayNow&StartPositionTicks=0&api_key=' . $config['apikey'];
-        self::requestApi($url, 'POST', null, false, 2);
-        log::add('jellyfin', 'debug', 'PlayNow direct: ' . $mediaId);
-        return true;
     }
 
     private static function findTriggerByMediaId($sections, $mediaId) {

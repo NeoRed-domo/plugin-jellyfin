@@ -16,9 +16,10 @@ try {
     $content = file_get_contents("php://input");
     $payload = json_decode($content, true);
 
-    // Debug pour être sûr qu'on reçoit quelque chose
-    if (log::getLogLevel('jellyfin') <= 100) { // Si niveau Debug
-        log::add('jellyfin', 'debug', 'Données reçues du démon : ' . print_r($payload, true));
+    // Debug léger (nombre de sessions, pas le payload complet)
+    if (log::getLogLevel('jellyfin') <= 100) {
+        $count = is_array($payload) ? count($payload) : 0;
+        log::add('jellyfin', 'debug', 'Données démon: ' . $count . ' session(s)');
     }
 
     // 3. Appel de la fonction de traitement dans la classe principale
