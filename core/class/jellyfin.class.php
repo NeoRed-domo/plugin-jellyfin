@@ -973,6 +973,10 @@ public function remoteControl($commandName, $_options = null) {
         }
     }
 
+    const MAX_LAUNCH_RETRIES = 2;
+    const LAUNCH_TIMEOUT = 10;    // secondes pour qu'un média démarre
+    const STUCK_TIMEOUT = 30;     // secondes sans changement de position = bloqué
+
     private static function tickCinema($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
         if (!$config) return;
 
@@ -980,17 +984,70 @@ public function remoteControl($commandName, $_options = null) {
         $currentSection = $engineState['current_section'] ?? '';
         $triggerIndex = $engineState['current_trigger_index'] ?? 0;
         $currentMediaId = $engineState['current_media_id'] ?? '';
+        $now = time();
 
+        // --- GARDE-FOU 1 : Vérif bounds ---
         $triggers = $sections[$currentSection]['triggers'] ?? [];
-        $currentTrigger = $triggers[$triggerIndex] ?? null;
-
-        if (!$currentTrigger) {
+        if ($triggerIndex >= count($triggers) || !isset($triggers[$triggerIndex])) {
+            log::add('jellyfin', 'debug', 'Index hors limites (section: ' . $currentSection . ', idx: ' . $triggerIndex . '). Avancement.');
             self::advanceToNextSection($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey);
             return;
         }
 
-        if ($currentTrigger['type'] == 'media') {
-            // Resync si désynchronisé (spec 5.2 point 2, 5.9)
+        $currentTrigger = $triggers[$triggerIndex];
+        if ($currentTrigger['type'] != 'media') {
+            // Trigger non-média au tick — ne devrait pas arriver (traité par executeNonMediaTriggers)
+            // Sécurité : on avance
+            $engineState['current_trigger_index']++;
+            self::executeNonMediaTriggers($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey);
+            return;
+        }
+
+        // === ÉTAT 1 : ON A LANCÉ UN MÉDIA, IL N'A PAS ENCORE DÉMARRÉ ===
+        if (!empty($currentMediaId) && $status != 'Playing' && $status != 'Paused') {
+            $launchAt = $engineState['media_launch_at'] ?? 0;
+            $retries = $engineState['launch_retries'] ?? 0;
+
+            if ($launchAt == 0) {
+                // Premier tick après lancement — noter le timestamp
+                $engineState['media_launch_at'] = $now;
+                cache::set($cacheKey, json_encode($engineState));
+                return;
+            }
+
+            $elapsed = $now - $launchAt;
+
+            if ($elapsed < self::LAUNCH_TIMEOUT) {
+                // Patience — le média peut mettre quelques secondes à démarrer
+                cache::set($cacheKey, json_encode($engineState));
+                return;
+            }
+
+            // Timeout de lancement dépassé
+            if ($retries < self::MAX_LAUNCH_RETRIES) {
+                // Retry
+                $engineState['launch_retries'] = $retries + 1;
+                $engineState['media_launch_at'] = $now;
+                log::add('jellyfin', 'warning', 'Média ne démarre pas, retry ' . ($retries + 1) . '/' . self::MAX_LAUNCH_RETRIES . ': ' . $currentMediaId);
+                self::playMediaDirect($playerEq, $currentMediaId, $config);
+                cache::set($cacheKey, json_encode($engineState));
+                return;
+            }
+
+            // Max retries atteint — SKIP ce trigger
+            log::add('jellyfin', 'error', 'Média en échec après ' . self::MAX_LAUNCH_RETRIES . ' tentatives, SKIP: ' . $currentMediaId);
+            self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
+            return;
+        }
+
+        // === ÉTAT 2 : LE MÉDIA EST EN LECTURE ===
+        if ($status == 'Playing' || $status == 'Paused') {
+            // Réinitialiser les compteurs de lancement
+            unset($engineState['media_launch_at']);
+            unset($engineState['launch_retries']);
+            unset($engineState['stopped_since']);
+
+            // Resync si le lecteur joue un média inattendu
             if ($status == 'Playing' && !empty($itemId) && !empty($currentMediaId) && $itemId != $currentMediaId) {
                 $found = self::findTriggerByMediaId($sections, $itemId);
                 if ($found) {
@@ -998,44 +1055,25 @@ public function remoteControl($commandName, $_options = null) {
                     $engineState['current_trigger_index'] = $found['index'];
                     $engineState['current_media_id'] = $itemId;
                     $engineState['queued'] = false;
-                    log::add('jellyfin', 'info', 'Resync moteur: média ' . $itemId . ' dans section ' . $found['section']);
-                } else {
-                    log::add('jellyfin', 'error', 'Média inconnu en lecture: ' . $itemId . '. Arrêt séance.');
-                    $sessionEq->stopSession();
-                    return;
+                    log::add('jellyfin', 'info', 'Resync: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
                 }
             }
 
-            // Fallback timeout — média terminé, passer au suivant
-            $fallbackTimeout = (float)config::byKey('fallback_timeout', 'jellyfin', 5);
-            if ($status == 'Stopped' && !empty($currentMediaId)) {
-                if (!isset($engineState['stopped_since'])) {
-                    $engineState['stopped_since'] = time();
-                } elseif (time() - $engineState['stopped_since'] >= $fallbackTimeout) {
-                    unset($engineState['stopped_since']);
-                    $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
-                    if ($next) {
-                        // Mettre à jour section + index vers la position réelle du prochain média
-                        $engineState['current_section'] = $next['section'];
-                        $engineState['current_trigger_index'] = $next['index'];
-                        $engineState['current_media_id'] = $next['trigger']['media_id'];
-                        $engineState['queued'] = false;
-                        // Ambiance si changement de section
-                        if ($next['section'] != $currentSection) {
-                            self::triggerLighting($sessionEq->getSessionLighting($next['section']));
-                            $engineState['current_lighting'] = $next['section'];
-                            $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$next['section']] ?? $next['section']);
-                        }
-                        self::playMediaDirect($playerEq, $next['trigger']['media_id'], $config);
-                        log::add('jellyfin', 'warning', 'Fallback PlayNow: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . ')');
-                    } else {
-                        // Plus rien à jouer
-                        $sessionEq->stopSession();
+            // Détection stuck (position ne bouge plus pendant 30s en Playing)
+            if ($status == 'Playing' && $positionTicks > 0) {
+                $lastPos = $engineState['last_position_ticks'] ?? 0;
+                if ($positionTicks == $lastPos) {
+                    $stuckSince = $engineState['stuck_since'] ?? $now;
+                    if ($now - $stuckSince >= self::STUCK_TIMEOUT) {
+                        log::add('jellyfin', 'error', 'Média bloqué depuis ' . self::STUCK_TIMEOUT . 's, SKIP: ' . $currentMediaId);
+                        self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
                         return;
                     }
+                    $engineState['stuck_since'] = $stuckSince;
+                } else {
+                    unset($engineState['stuck_since']);
                 }
-            } else {
-                unset($engineState['stopped_since']);
+                $engineState['last_position_ticks'] = $positionTicks;
             }
 
             // Pré-chargement + NextTrack anticipé
@@ -1044,45 +1082,39 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($runTimeTicks > 0 && $status == 'Playing') {
                 $remainingSeconds = ($runTimeTicks - $positionTicks) / 10000000;
-                $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
+                $next = self::findNextMediaTrigger($sections, $engineState['current_section'], $engineState['current_trigger_index']);
 
                 if ($next && !($engineState['queued'] ?? false) && $remainingSeconds <= $queueAnticipation && $remainingSeconds > $nextAnticipation) {
                     self::queueMediaDirect($jellyfinSessionId, $next['trigger']['media_id'], $config);
                     $engineState['expected_next_media_id'] = $next['trigger']['media_id'];
                     $engineState['queued'] = true;
+                    log::add('jellyfin', 'debug', 'Queue anticipé: ' . $next['trigger']['media_id']);
                 }
 
                 if ($next && $remainingSeconds <= $nextAnticipation) {
                     self::sendNextTrackDirect($jellyfinSessionId, $config);
-                    $engineState['current_section'] = $next['section'];
-                    $engineState['current_trigger_index'] = $next['index'];
-                    $engineState['current_media_id'] = $next['trigger']['media_id'];
-                    $engineState['queued'] = false;
-                    if ($next['section'] != $currentSection) {
-                        self::triggerLighting($sessionEq->getSessionLighting($next['section']));
-                        $engineState['current_lighting'] = $next['section'];
-                        $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$next['section']] ?? $next['section']);
-                    }
+                    self::transitionTo($sessionEq, $engineState, $next, $currentSection);
+                    log::add('jellyfin', 'debug', 'NextTrack anticipé → ' . $next['trigger']['media_id']);
                 }
             }
 
-            // Tops film
-            if ($currentSection == 'film' && isset($sections['film']['marks'])) {
+            // Tops film (uniquement en section film)
+            if ($engineState['current_section'] == 'film' && isset($sections['film']['marks']) && $status == 'Playing') {
                 $positionSeconds = $positionTicks / 10000000;
                 foreach (self::MARK_ORDER as $mark) {
                     $markTime = $sections['film']['marks'][$mark] ?? null;
                     if ($markTime === null) continue;
                     $lastMark = $engineState['last_mark_triggered'] ?? '';
-                    if ($positionSeconds >= $markTime && $lastMark != $mark) {
-                        $markIdx = array_search($mark, self::MARK_ORDER);
-                        $lastIdx = ($lastMark != '') ? array_search($lastMark, self::MARK_ORDER) : -1;
-                        if ($markIdx > $lastIdx) {
-                            self::triggerLighting($sessionEq->getSessionLighting($mark));
-                            $engineState['last_mark_triggered'] = $mark;
-                            $engineState['current_lighting'] = $mark;
-                        }
+                    $markIdx = array_search($mark, self::MARK_ORDER);
+                    $lastIdx = ($lastMark != '') ? array_search($lastMark, self::MARK_ORDER) : -1;
+                    if ($positionSeconds >= $markTime && $markIdx > $lastIdx) {
+                        self::triggerLighting($sessionEq->getSessionLighting($mark));
+                        $engineState['last_mark_triggered'] = $mark;
+                        $engineState['current_lighting'] = $mark;
+                        log::add('jellyfin', 'info', 'Top film déclenché: ' . $mark . ' à ' . round($positionSeconds) . 's');
                     }
                     if ($mark == 'fin' && $positionSeconds >= $markTime) {
+                        log::add('jellyfin', 'info', 'Fin du film atteinte. Arrêt séance.');
                         $sessionEq->stopSession();
                         return;
                     }
@@ -1090,8 +1122,86 @@ public function remoteControl($commandName, $_options = null) {
             }
         }
 
+        // === ÉTAT 3 : MÉDIA TERMINÉ (Stopped) — ENCHAÎNER IMMÉDIATEMENT ===
+        if ($status == 'Stopped' && !empty($currentMediaId)) {
+            // Pas d'attente : le média est terminé, on enchaîne tout de suite
+            log::add('jellyfin', 'debug', 'Média terminé, enchaînement immédiat: ' . $currentMediaId);
+            unset($engineState['stopped_since']);
+            unset($engineState['media_launch_at']);
+            unset($engineState['launch_retries']);
+            self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
+            return;
+        }
+
         self::updateSessionProgress($sessionEq, $sessionData, $engineState);
         cache::set($cacheKey, json_encode($engineState));
+    }
+
+    /**
+     * Transition vers le prochain trigger trouvé par findNextMediaTrigger
+     */
+    private static function transitionTo($sessionEq, &$engineState, $next, $previousSection) {
+        $engineState['current_section'] = $next['section'];
+        $engineState['current_trigger_index'] = $next['index'];
+        $engineState['current_media_id'] = $next['trigger']['media_id'];
+        $engineState['queued'] = false;
+        unset($engineState['media_launch_at']);
+        unset($engineState['launch_retries']);
+        unset($engineState['stopped_since']);
+        unset($engineState['stuck_since']);
+        unset($engineState['last_position_ticks']);
+        if ($next['section'] != $previousSection) {
+            self::triggerLighting($sessionEq->getSessionLighting($next['section']));
+            $engineState['current_lighting'] = $next['section'];
+            $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$next['section']] ?? $next['section']);
+        }
+    }
+
+    /**
+     * Skip le trigger courant et passe au suivant (média ou non-média)
+     */
+    private static function skipToNextTrigger($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $config) {
+        $sections = $sessionData['sections'] ?? [];
+        $currentSection = $engineState['current_section'];
+        $triggerIndex = $engineState['current_trigger_index'];
+
+        // Nettoyer les flags
+        unset($engineState['media_launch_at']);
+        unset($engineState['launch_retries']);
+        unset($engineState['stopped_since']);
+        unset($engineState['stuck_since']);
+        unset($engineState['last_position_ticks']);
+
+        // Chercher le prochain média
+        $next = self::findNextMediaTrigger($sections, $currentSection, $triggerIndex);
+        if ($next) {
+            $previousSection = $engineState['current_section'];
+            self::transitionTo($sessionEq, $engineState, $next, $previousSection);
+
+            // Exécuter les non-média entre l'ancien index et le nouveau
+            // (si même section et triggers intermédiaires)
+            // Pour simplifier : on lance directement le média trouvé
+            $launched = self::playMediaDirect($playerEq, $next['trigger']['media_id'], $config);
+            if (!$launched) {
+                log::add('jellyfin', 'error', 'playMediaDirect a échoué pour: ' . $next['trigger']['media_id'] . '. Skip.');
+                // Récursion sécurisée (max depth via retries)
+                $engineState['launch_retries'] = ($engineState['launch_retries'] ?? 0) + 1;
+                if (($engineState['launch_retries'] ?? 0) <= self::MAX_LAUNCH_RETRIES) {
+                    self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
+                } else {
+                    log::add('jellyfin', 'error', 'Trop d\'échecs consécutifs. Arrêt séance.');
+                    $sessionEq->stopSession();
+                }
+                return;
+            }
+
+            $engineState['media_launch_at'] = time();
+            log::add('jellyfin', 'info', 'Lancement: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . '[' . $next['index'] . '])');
+            cache::set($cacheKey, json_encode($engineState));
+        } else {
+            log::add('jellyfin', 'info', 'Plus de médias à jouer. Fin de séance.');
+            $sessionEq->stopSession();
+        }
     }
 
     private static function tickCommercial($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
