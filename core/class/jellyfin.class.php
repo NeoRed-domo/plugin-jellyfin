@@ -1093,11 +1093,6 @@ public function remoteControl($commandName, $_options = null) {
             }
             unset($engineState['stopped_since']);
 
-            // Queue TOUS les médias restants dès que le premier clip est confirmé en lecture
-            if ($status == 'Playing' && !($engineState['queued'] ?? false)) {
-                self::queueAllRemainingMedia($playerEq, $sessionData, $engineState, $config);
-            }
-
             // Resync : quand Jellyfin auto-avance via la queue, on détecte le nouvel item_id
             // et on met à jour le moteur pour suivre la bonne section/index
             if ($status == 'Playing' && !empty($itemId) && !empty($currentMediaId) && $itemId != $currentMediaId) {
@@ -1107,8 +1102,9 @@ public function remoteControl($commandName, $_options = null) {
                     $engineState['current_section'] = $found['section'];
                     $engineState['current_trigger_index'] = $found['index'];
                     $engineState['current_media_id'] = $itemId;
-                    $engineState['queued'] = false;
+                    $engineState['queued'] = true; // La playlist client est toujours active — ne PAS re-queue
                     unset($engineState['media_launch_at']);
+                    unset($engineState['stopped_since']);
                     // Ambiance si changement de section
                     if ($found['section'] != $previousSection) {
                         self::triggerLighting($sessionEq->getSessionLighting($found['section']));
@@ -1116,8 +1112,12 @@ public function remoteControl($commandName, $_options = null) {
                         $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$found['section']] ?? $found['section']);
                     }
                     log::add('jellyfin', 'info', 'Auto-avancement détecté: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
-                    // Pas besoin de re-queue: toute la playlist est déjà dans Jellyfin
                 }
+            }
+
+            // Queue initial (seulement si aucune playlist n'est active — premier clip uniquement)
+            if ($status == 'Playing' && !($engineState['queued'] ?? false)) {
+                self::queueAllRemainingMedia($playerEq, $sessionData, $engineState, $config);
             }
 
             // Détection stuck (position ne bouge plus pendant 30s en Playing)
