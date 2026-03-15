@@ -189,6 +189,225 @@ if (init('action') == 'add') {
         }
     }
 
+    /* ************************* Actions Séances ************************* */
+
+    if (init('action') == 'create_session') {
+        $name = init('name');
+        $sessionType = init('session_type');
+        if (empty($name) || !in_array($sessionType, ['cinema', 'commercial'])) {
+            throw new Exception(__('Paramètres invalides', __FILE__));
+        }
+
+        $eqLogic = new jellyfin();
+        $eqLogic->setName($name);
+        $eqLogic->setEqType_name('jellyfin');
+        $eqLogic->setConfiguration('session_type', $sessionType);
+        $eqLogic->setIsEnable(1);
+        $eqLogic->setIsVisible(1);
+
+        if ($sessionType == 'cinema') {
+            $sections = [];
+            foreach (jellyfin::SECTION_ORDER as $key) {
+                $sections[$key] = ['triggers' => []];
+            }
+            $sections['film']['marks'] = array_fill_keys(jellyfin::MARK_ORDER, null);
+            $lighting = array_fill_keys(array_merge(jellyfin::SECTION_ORDER, jellyfin::MARK_ORDER, ['pause']), null);
+            $eqLogic->setConfiguration('session_data', [
+                'player_id' => null,
+                'sections'  => $sections,
+                'lighting'  => $lighting
+            ]);
+        } else {
+            $eqLogic->setConfiguration('session_data', [
+                'player_id' => null,
+                'loop'      => true,
+                'playlist'  => []
+            ]);
+        }
+
+        $eqLogic->save();
+        ajax::success($eqLogic->toArray());
+    }
+
+    if (init('action') == 'save_session_data') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        $sessionData = json_decode(init('session_data'), true);
+        if (!is_array($sessionData)) {
+            throw new Exception(__('Données invalides', __FILE__));
+        }
+        $eqLogic->setConfiguration('session_data', $sessionData);
+        $eqLogic->save();
+        ajax::success();
+    }
+
+    if (init('action') == 'get_session_data') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        ajax::success([
+            'session_type' => $eqLogic->getConfiguration('session_type'),
+            'session_data' => $eqLogic->getConfiguration('session_data'),
+            'sections_meta' => [
+                'order'  => jellyfin::SECTION_ORDER,
+                'labels' => jellyfin::SECTION_LABELS,
+                'colors' => jellyfin::SECTION_COLORS
+            ],
+            'marks_meta' => [
+                'order'  => jellyfin::MARK_ORDER,
+                'labels' => jellyfin::MARK_LABELS
+            ]
+        ]);
+    }
+
+    if (init('action') == 'start_session') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        $result = $eqLogic->startSession();
+        if (isset($result['error'])) throw new Exception($result['error']);
+        ajax::success($result);
+    }
+
+    if (init('action') == 'stop_session') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic)) throw new Exception(__('Séance introuvable', __FILE__));
+        ajax::success($eqLogic->stopSession());
+    }
+
+    if (init('action') == 'pause_session') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic)) throw new Exception(__('Séance introuvable', __FILE__));
+        ajax::success($eqLogic->pauseSession());
+    }
+
+    if (init('action') == 'resume_session') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic)) throw new Exception(__('Séance introuvable', __FILE__));
+        ajax::success($eqLogic->resumeSession());
+    }
+
+    if (init('action') == 'schedule_session') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        $datetime = init('datetime');
+        if (empty($datetime)) throw new Exception(__('Date/heure requise', __FILE__));
+
+        $cron = new cron();
+        $cron->setClass('jellyfin');
+        $cron->setFunction('executeSession');
+        $cron->setOption(['session_id' => $eqLogic->getId()]);
+        $cron->setOnce(1);
+        $dt = new DateTime($datetime);
+        $cron->setSchedule($dt->format('i') . ' ' . $dt->format('H') . ' ' . $dt->format('d') . ' ' . $dt->format('m') . ' * ' . $dt->format('Y'));
+        $cron->save();
+        ajax::success(['scheduled' => $datetime]);
+    }
+
+    if (init('action') == 'calibrate_start') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') != 'cinema') {
+            throw new Exception(__('Séance cinéma introuvable', __FILE__));
+        }
+        $mediaId = init('mediaId');
+        if (empty($mediaId)) throw new Exception(__('ID média requis', __FILE__));
+
+        $sessionData = $eqLogic->getConfiguration('session_data');
+        $playerId = $sessionData['player_id'] ?? null;
+        if (empty($playerId)) throw new Exception(__('Aucun lecteur sélectionné', __FILE__));
+
+        $player = jellyfin::byId($playerId);
+        if (!is_object($player)) throw new Exception(__('Lecteur introuvable', __FILE__));
+
+        $result = $player->playMedia($mediaId, 'play_now');
+        ajax::success($result);
+    }
+
+    if (init('action') == 'calibrate_set_mark') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') != 'cinema') {
+            throw new Exception(__('Séance cinéma introuvable', __FILE__));
+        }
+        $markName = init('mark_name');
+        $position = init('position');
+
+        if (!in_array($markName, jellyfin::MARK_ORDER)) {
+            throw new Exception(__('Marqueur invalide', __FILE__));
+        }
+
+        $sessionData = $eqLogic->getConfiguration('session_data');
+        $sessionData['sections']['film']['marks'][$markName] = (int)$position;
+        $eqLogic->setConfiguration('session_data', $sessionData);
+        $eqLogic->save();
+        ajax::success();
+    }
+
+    if (init('action') == 'get_sessions_for_player') {
+        $playerId = init('player_id');
+        $sessions = jellyfin::getSessionsForPlayer($playerId);
+        $result = [];
+        foreach ($sessions as $session) {
+            $sd = $session->getConfiguration('session_data');
+            $type = $session->getConfiguration('session_type');
+            $info = [
+                'id'   => $session->getId(),
+                'name' => $session->getName(),
+                'type' => $type,
+                'player_id' => $sd['player_id'] ?? null
+            ];
+
+            if ($type == 'cinema' && isset($sd['sections'])) {
+                $totalTicks = 0;
+                $counts = ['media' => 0, 'pubs' => 0, 'trailers' => 0, 'short_film' => 0];
+                foreach ($sd['sections'] as $sectionKey => $section) {
+                    foreach ($section['triggers'] ?? [] as $trigger) {
+                        if ($trigger['type'] == 'media') {
+                            $totalTicks += $trigger['duration_ticks'] ?? 0;
+                            if ($sectionKey == 'pubs') $counts['pubs']++;
+                            elseif ($sectionKey == 'trailers') $counts['trailers']++;
+                            elseif ($sectionKey == 'short_film') $counts['short_film']++;
+                            $counts['media']++;
+                        }
+                    }
+                }
+                $info['total_duration'] = floor($totalTicks / 10000000);
+                $info['counts'] = $counts;
+
+                $filmTriggers = $sd['sections']['film']['triggers'] ?? [];
+                $info['poster'] = null;
+                $info['film_name'] = '';
+                foreach ($filmTriggers as $t) {
+                    if ($t['type'] == 'media') {
+                        $info['poster'] = jellyfin::getItemImageUrl($t['media_id'], $t['img_tag'] ?? null);
+                        $info['film_name'] = $t['name'] ?? '';
+                        break;
+                    }
+                }
+            } elseif ($type == 'commercial' && isset($sd['playlist'])) {
+                $totalTicks = 0;
+                foreach ($sd['playlist'] as $trigger) {
+                    $totalTicks += $trigger['duration_ticks'] ?? 0;
+                }
+                $info['total_duration'] = floor($totalTicks / 10000000);
+                $info['counts'] = ['media' => count($sd['playlist'])];
+                $info['poster'] = null;
+                if (!empty($sd['playlist'])) {
+                    $first = $sd['playlist'][0];
+                    $info['poster'] = jellyfin::getItemImageUrl($first['media_id'], $first['img_tag'] ?? null);
+                }
+            }
+
+            $result[] = $info;
+        }
+        ajax::success($result);
+    }
+
     throw new Exception(__('Aucune methode correspondante à : ', __FILE__) . init('action'));
     /* * *************************Catch***************************** */
 } catch (Exception $e) {
