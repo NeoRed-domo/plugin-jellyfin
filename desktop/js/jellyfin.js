@@ -700,10 +700,33 @@ var SessionEditor = {
 
         html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
         html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale') + ' : <strong style="color:#fff;" id="session-total-duration">' + dur + '</strong> · <i class="fas fa-redo"></i> ' + _t('Boucle infinie') + '</span>';
-        html += '  <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
+        html += '  <div style="display:flex; gap:6px;">';
+        html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
+        html += '    <button class="btn btn-sm btn-danger" onclick="SessionEditor.stopSession()" style="display:none;" id="session-stop-btn"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>';
+        html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.refreshDurations()"><i class="fas fa-sync"></i> ' + _t('Rafraîchir durées') + '</button>';
+        html += '  </div>';
+        html += '</div>';
+
+        // Monitoring live (même que cinéma)
+        html += '<div id="session-monitor" style="margin-top:10px; padding:12px; background:#111; border:1px solid #333; border-radius:4px; display:none;">';
+        html += '  <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">';
+        html += '    <span style="color:#1DB954; font-weight:bold; font-size:13px;"><i class="fas fa-broadcast-tower"></i> ' + _t('Diffusion en cours') + '</span>';
+        html += '    <span id="monitor-state" style="font-size:11px; padding:2px 8px; border-radius:3px; background:#333; color:#aaa;"></span>';
+        html += '  </div>';
+        html += '  <div style="display:flex; gap:15px; flex-wrap:wrap; font-size:12px; color:#ccc;">';
+        html += '    <div><i class="fas fa-film" style="color:#888;"></i> ' + _t('Média') + ': <strong id="monitor-title">-</strong></div>';
+        html += '    <div><i class="fas fa-clock" style="color:#888;"></i> <strong id="monitor-position">--:--</strong> / <span id="monitor-duration">--:--</span></div>';
+        html += '    <div><i class="fas fa-tasks" style="color:#888;"></i> ' + _t('Progression') + ': <strong id="monitor-progress">0</strong>%</div>';
+        html += '  </div>';
+        html += '  <div style="margin-top:8px; height:4px; background:#333; border-radius:2px;">';
+        html += '    <div id="monitor-progress-bar" style="height:100%; background:#1DB954; border-radius:2px; width:0%; transition:width 0.5s;"></div>';
+        html += '  </div>';
         html += '</div>';
 
         $('#session-editor-container').html(html);
+
+        // Démarrer le polling monitoring
+        SessionEditor.startMonitoring();
     },
 
     renderTriggerList: function(triggers, sectionKey) {
