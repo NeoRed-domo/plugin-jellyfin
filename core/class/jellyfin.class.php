@@ -945,6 +945,15 @@ public function remoteControl($commandName, $_options = null) {
         $positionTicks = (int)($playerData['position_ticks'] ?? 0);
         $runTimeTicks = (int)($playerData['run_time_ticks'] ?? 0);
 
+        // Correction status daemon : il envoie "Playing" même quand rien ne joue
+        // (session idle sans NowPlayingItem → IsPaused=false → "Playing")
+        // Si item_id est vide et qu'on attendait un média, c'est en réalité "Stopped"
+        $currentMediaId = $engineState['current_media_id'] ?? '';
+        if (($status == 'Playing' || $status == 'Paused') && empty($itemId) && !empty($currentMediaId)) {
+            $status = 'Stopped';
+            log::add('jellyfin', 'debug', 'Status corrigé: Playing→Stopped (session idle, item_id vide)');
+        }
+
         // Gestion pause télécommande
         $lastStatus = $engineState['last_status'] ?? 'Playing';
         if ($status == 'Paused' && $lastStatus == 'Playing') {
