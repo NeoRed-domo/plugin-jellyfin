@@ -506,21 +506,23 @@ public function remoteControl($commandName, $_options = null) {
         return null;
     }
 
-    public static function requestApi($url, $method = 'GET', $data = null, $binary = false) {
+    public static function requestApi($url, $method = 'GET', $data = null, $binary = false, $timeout = 5) {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        if (!$binary) curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+        $headers = [];
+        if (!$binary) $headers[] = 'Accept: application/json';
         if ($method == 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
             if ($data) {
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                $headers[] = 'Content-Type: application/json';
             } else {
-                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Length: 0']);
+                $headers[] = 'Content-Length: 0';
             }
         }
+        if (!empty($headers)) curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $result = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
