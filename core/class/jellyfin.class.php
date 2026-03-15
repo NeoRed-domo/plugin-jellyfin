@@ -992,8 +992,9 @@ public function remoteControl($commandName, $_options = null) {
     }
 
     const MAX_LAUNCH_RETRIES = 2;
-    const LAUNCH_TIMEOUT = 10;    // secondes pour qu'un média démarre
+    const LAUNCH_TIMEOUT = 5;     // secondes pour qu'un média démarre
     const STUCK_TIMEOUT = 30;     // secondes sans changement de position = bloqué
+    const QUEUE_GRACE_PERIOD = 4; // secondes d'attente pour l'auto-avancement Jellyfin après queue
 
     private static function tickCinema($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
         if (!$config) return;
@@ -1025,7 +1026,27 @@ public function remoteControl($commandName, $_options = null) {
         // Condition : status Stopped + currentMediaId set + PAS de lancement en attente
         $launchAt = $engineState['media_launch_at'] ?? 0;
         if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
-            log::add('jellyfin', 'debug', 'Média terminé, enchaînement immédiat: ' . $currentMediaId);
+            $wasQueued = $engineState['queued'] ?? false;
+
+            if ($wasQueued) {
+                // Le prochain clip est dans la queue Jellyfin — attendre l'auto-avancement
+                if (!isset($engineState['stopped_since'])) {
+                    $engineState['stopped_since'] = $now;
+                    log::add('jellyfin', 'debug', 'Média terminé, attente auto-avancement Jellyfin (queue active): ' . $currentMediaId);
+                    cache::set($cacheKey, json_encode($engineState));
+                    return;
+                }
+                if ($now - $engineState['stopped_since'] < self::QUEUE_GRACE_PERIOD) {
+                    // Patience — Jellyfin va auto-avancer
+                    cache::set($cacheKey, json_encode($engineState));
+                    return;
+                }
+                // Grace period dépassée — Jellyfin n'a pas auto-avancé, fallback
+                log::add('jellyfin', 'warning', 'Auto-avancement Jellyfin échoué après ' . self::QUEUE_GRACE_PERIOD . 's, fallback playMedia');
+            } else {
+                log::add('jellyfin', 'debug', 'Média terminé, pas de queue, fallback immédiat: ' . $currentMediaId);
+            }
+
             unset($engineState['stopped_since']);
             unset($engineState['stuck_since']);
             unset($engineState['last_position_ticks']);
