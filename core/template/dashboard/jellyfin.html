@@ -83,6 +83,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <i class="fas fa-heart heart-btn toggle-shortcuts-btn" title="Mes favoris"></i>
+                <i class="fas fa-film session-btn" title="Séances"></i>
                 <img class="logo-jellyfin-img" src="plugins/jellyfin/core/img/logo_jellyfin.png" style="height:30px;">
             </div>
         </div>
@@ -310,6 +311,66 @@
         $('.eqLogic[data-eqLogic_id=#id#] .logo-jellyfin-img, .eqLogic[data-eqLogic_id=#id#] .open-lib-trigger').on('click', function() {
             if (typeof JellyfinBrowser !== 'undefined') JellyfinBrowser.open('#id#', '#name_display#');
         });
+
+        $('.eqLogic[data-eqLogic_id=#id#] .session-btn').on('click', function() {
+            $.ajax({
+                type: 'POST',
+                url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                data: { action: 'get_sessions_for_player', player_id: '#id#' },
+                dataType: 'json',
+                success: function(data) {
+                    if (data.state != 'ok' || !data.result || data.result.length == 0) {
+                        bootbox.alert(_wt('Aucune séance configurée pour ce lecteur.'));
+                        return;
+                    }
+                    var html = '<div style="max-height: 50vh; overflow-y: auto;">';
+                    data.result.forEach(function(s) {
+                        var icon = s.type == 'cinema' ? 'fa-film' : 'fa-redo';
+                        var typeLabel = s.type == 'cinema' ? _wt('Cinéma') : _wt('Boucle');
+                        var dur = s.total_duration ? Math.floor(s.total_duration / 3600) + 'h' + String(Math.floor((s.total_duration % 3600) / 60)).padStart(2,'0') : '--';
+                        var poster = s.poster ? '<img src="' + s.poster + '" style="width:50px;height:75px;object-fit:cover;border-radius:4px;">' : '<i class="fas ' + icon + '" style="font-size:30px;color:#555;"></i>';
+                        var stats = dur;
+                        if (s.counts) {
+                            if (s.counts.pubs) stats += ' · ' + s.counts.pubs + ' pub' + (s.counts.pubs > 1 ? 's' : '');
+                            if (s.counts.trailers) stats += ' · ' + s.counts.trailers + ' BA';
+                            if (s.counts.short_film) stats += ' · ' + s.counts.short_film + ' court';
+                        }
+                        html += '<div style="display:flex;gap:12px;align-items:center;padding:10px;border-bottom:1px solid #333;">';
+                        html += '<div style="width:50px;flex-shrink:0;text-align:center;">' + poster + '</div>';
+                        html += '<div style="flex-grow:1;">';
+                        html += '<div style="font-weight:bold;color:#fff;">' + s.name + ' <span style="color:#888;font-size:11px;"><i class="fas ' + icon + '"></i> ' + typeLabel + '</span></div>';
+                        html += '<div style="font-size:11px;color:#aaa;">' + stats + '</div>';
+                        if (s.film_name) html += '<div style="font-size:11px;color:#888;">' + _wt('Film') + ': ' + s.film_name + '</div>';
+                        html += '</div>';
+                        html += '<div><a class="btn btn-sm btn-success launch-session-btn" data-session-id="' + s.id + '"><i class="fas fa-play"></i></a></div>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+
+                    var modal = bootbox.dialog({
+                        title: '<i class="fas fa-film"></i> ' + _wt('Séances'),
+                        message: html,
+                        buttons: { close: { label: _wt('Fermer'), className: 'btn-default' } }
+                    });
+
+                    modal.find('.launch-session-btn').on('click', function() {
+                        var sid = $(this).data('session-id');
+                        var btn = $(this);
+                        btn.html('<i class="fas fa-spinner fa-spin"></i>');
+                        $.ajax({
+                            type: 'POST',
+                            url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                            data: { action: 'start_session', id: sid },
+                            dataType: 'json',
+                            success: function(data) {
+                                if (data.state == 'ok') { bootbox.hideAll(); }
+                                else { btn.html('<i class="fas fa-play"></i>'); bootbox.alert(data.result); }
+                            }
+                        });
+                    });
+                }
+            });
+        });
     </script>
     <style>
         .jellyfinWidget .action-btn { color: #ccc; transition: all 0.2s; cursor: pointer; }
@@ -319,7 +380,10 @@
         /* GLOW EFFECTS */
         .heart-btn { color: #666; cursor: pointer; transition: all 0.2s; }
         .heart-btn:hover { color: #ff4757; transform: scale(1.2); filter: drop-shadow(0 0 8px rgba(255, 71, 87, 0.8)); }
-        
+
+        .session-btn { color: #666; cursor: pointer; transition: all 0.2s; }
+        .session-btn:hover { color: #1DB954; transform: scale(1.2); filter: drop-shadow(0 0 8px rgba(29, 185, 84, 0.8)); }
+
         .logo-jellyfin-img { cursor: pointer; opacity: 0.6; transition: 0.2s; }
         .logo-jellyfin-img:hover { opacity: 1; transform: scale(1.1); filter: drop-shadow(0 0 8px rgba(156, 39, 176, 0.8)); }
         
