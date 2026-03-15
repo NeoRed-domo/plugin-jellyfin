@@ -1026,8 +1026,20 @@ public function remoteControl($commandName, $_options = null) {
         // Condition : status Stopped + currentMediaId set + PAS de lancement en attente
         $launchAt = $engineState['media_launch_at'] ?? 0;
         if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
-            // Média terminé → enchaîner immédiatement (pas d'attente)
-            log::add('jellyfin', 'info', 'STATE3: Média terminé (launchAt=0), enchaînement: ' . $currentMediaId);
+            // Si playlist active, laisser le temps au client d'auto-avancer
+            if ($engineState['queued'] ?? false) {
+                if (!isset($engineState['stopped_since'])) {
+                    $engineState['stopped_since'] = $now;
+                    cache::set($cacheKey, json_encode($engineState));
+                    return;
+                }
+                if ($now - $engineState['stopped_since'] < 2) {
+                    cache::set($cacheKey, json_encode($engineState));
+                    return; // Attente auto-avancement client (max 2s)
+                }
+                log::add('jellyfin', 'info', 'STATE3: Auto-avancement non détecté après 2s, fallback');
+            }
+            log::add('jellyfin', 'info', 'STATE3: Média terminé, enchaînement: ' . $currentMediaId);
             unset($engineState['stopped_since']);
             unset($engineState['stuck_since']);
             unset($engineState['last_position_ticks']);
