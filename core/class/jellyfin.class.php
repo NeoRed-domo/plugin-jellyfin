@@ -1466,7 +1466,8 @@ public function remoteControl($commandName, $_options = null) {
      */
     private static function applyVolume($playerEq, $trigger) {
         $ampCmdId = $playerEq->getConfiguration('amp_volume_cmd_id');
-        if (empty($ampCmdId)) return; // Pas d'ampli configuré
+        if (empty($ampCmdId) || !is_numeric($ampCmdId)) return; // Pas d'ampli configuré
+        log::add('jellyfin', 'debug', 'applyVolume: ampCmdId=' . $ampCmdId . ', trigger.volume=' . ($trigger['volume'] ?? 'non défini'));
 
         $volume = null;
         if (isset($trigger['volume']) && $trigger['volume'] !== '' && $trigger['volume'] !== null) {

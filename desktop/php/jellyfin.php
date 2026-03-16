@@ -133,8 +133,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <div class="form-group device-only">
                             <label class="col-sm-3 control-label"><?php echo __('Commande volume ampli', __FILE__); ?></label>
                             <div class="col-sm-4">
+                                <input type="hidden" class="eqLogicAttr" data-l1key="configuration" data-l2key="amp_volume_cmd_id" id="amp_volume_cmd_id" />
                                 <div class="input-group">
-                                    <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="amp_volume_cmd_id" id="amp_volume_cmd_display" readonly placeholder="<?php echo __('Aucun (optionnel)', __FILE__); ?>" />
+                                    <input type="text" class="form-control" id="amp_volume_cmd_display" readonly placeholder="<?php echo __('Aucun (optionnel)', __FILE__); ?>" />
                                     <span class="input-group-btn">
                                         <button class="btn btn-default" type="button" id="bt_pick_amp_volume"><i class="fas fa-list-alt"></i></button>
                                         <button class="btn btn-default" type="button" id="bt_clear_amp_volume"><i class="fas fa-times"></i></button>
@@ -233,10 +234,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
             }
             // Afficher le nom de la commande volume ampli si configurée
             var ampCmdId = _eqLogic.configuration.amp_volume_cmd_id;
-            if (ampCmdId && ampCmdId != '') {
+            if (ampCmdId && ampCmdId != '' && !isNaN(ampCmdId)) {
                 jeedom.cmd.byId({id: ampCmdId, success: function(cmd) {
-                    $('#amp_volume_cmd_display').val(cmd.humanName || ('Cmd #' + ampCmdId));
+                    if (cmd) $('#amp_volume_cmd_display').val(cmd.humanName || ('Cmd #' + ampCmdId));
                 }});
+            } else {
+                $('#amp_volume_cmd_display').val('');
             }
         }
     }
@@ -244,12 +247,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
     // Picker commande volume ampli
     $('#bt_pick_amp_volume').on('click', function() {
         jeedom.cmd.getSelectModal({ cmd: { type: 'action', subType: 'slider' } }, function(result) {
-            $('.eqLogicAttr[data-l2key=amp_volume_cmd_id]').val(result.cmd.id);
+            $('#amp_volume_cmd_id').val(result.cmd.id).change(); // .change() pour que Jeedom détecte la modif
             $('#amp_volume_cmd_display').val(result.human);
         });
     });
     $('#bt_clear_amp_volume').on('click', function() {
-        $('.eqLogicAttr[data-l2key=amp_volume_cmd_id]').val('');
+        $('#amp_volume_cmd_id').val('').change();
         $('#amp_volume_cmd_display').val('');
     });
 </script>
