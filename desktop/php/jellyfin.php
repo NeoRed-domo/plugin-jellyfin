@@ -130,6 +130,27 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
 
+                        <div class="form-group device-only">
+                            <label class="col-sm-3 control-label"><?php echo __('Commande volume ampli', __FILE__); ?></label>
+                            <div class="col-sm-4">
+                                <div class="input-group">
+                                    <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="amp_volume_cmd_id" id="amp_volume_cmd_display" readonly placeholder="<?php echo __('Aucun (optionnel)', __FILE__); ?>" />
+                                    <span class="input-group-btn">
+                                        <button class="btn btn-default" type="button" id="bt_pick_amp_volume"><i class="fas fa-list-alt"></i></button>
+                                        <button class="btn btn-default" type="button" id="bt_clear_amp_volume"><i class="fas fa-times"></i></button>
+                                    </span>
+                                </div>
+                                <span class="help-block"><?php echo __('Commande slider volume de votre ampli (optionnel). Permet de régler le volume par clip dans les séances.', __FILE__); ?></span>
+                            </div>
+                        </div>
+                        <div class="form-group device-only">
+                            <label class="col-sm-3 control-label"><?php echo __('Volume par défaut', __FILE__); ?></label>
+                            <div class="col-sm-2">
+                                <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="amp_default_volume" placeholder="50" min="0" max="100" />
+                                <span class="help-block"><?php echo __('Volume utilisé si non défini par clip (0-100)', __FILE__); ?></span>
+                            </div>
+                        </div>
+
                         <div class="form-group session-only" style="display:none;">
                             <label class="col-sm-3 control-label"><?php echo __('Type de séance', __FILE__); ?></label>
                             <div class="col-sm-3">
@@ -210,6 +231,25 @@ $eqLogics = eqLogic::byType($plugin->getId());
             if (_eqLogic.configuration.widget_border_enable == undefined) {
                 $('.eqLogicAttr[data-l2key=widget_border_enable]').prop('checked', false);
             }
+            // Afficher le nom de la commande volume ampli si configurée
+            var ampCmdId = _eqLogic.configuration.amp_volume_cmd_id;
+            if (ampCmdId && ampCmdId != '') {
+                jeedom.cmd.byId({id: ampCmdId, success: function(cmd) {
+                    $('#amp_volume_cmd_display').val(cmd.humanName || ('Cmd #' + ampCmdId));
+                }});
+            }
         }
     }
+
+    // Picker commande volume ampli
+    $('#bt_pick_amp_volume').on('click', function() {
+        jeedom.cmd.getSelectModal({ cmd: { type: 'action', subType: 'slider' } }, function(result) {
+            $('.eqLogicAttr[data-l2key=amp_volume_cmd_id]').val(result.cmd.id);
+            $('#amp_volume_cmd_display').val(result.human);
+        });
+    });
+    $('#bt_clear_amp_volume').on('click', function() {
+        $('.eqLogicAttr[data-l2key=amp_volume_cmd_id]').val('');
+        $('#amp_volume_cmd_display').val('');
+    });
 </script>

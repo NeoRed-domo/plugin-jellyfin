@@ -1114,6 +1114,11 @@ public function remoteControl($commandName, $_options = null) {
                         $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$found['section']] ?? $found['section']);
                     }
                     log::add('jellyfin', 'info', 'Auto-avancement détecté: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
+                    // Volume ampli pour le nouveau clip
+                    $foundTriggers = $sections[$found['section']]['triggers'] ?? [];
+                    if (isset($foundTriggers[$found['index']])) {
+                        self::applyVolume($playerEq, $foundTriggers[$found['index']]);
+                    }
                 }
             }
 
@@ -1247,7 +1252,9 @@ public function remoteControl($commandName, $_options = null) {
             $previousSection = $engineState['current_section'];
             self::transitionTo($sessionEq, $engineState, $next, $previousSection);
 
-            // Lancer UN SEUL média (la playlist multi-ItemIds ne fonctionne pas sur ce client)
+            // Volume ampli si configuré
+            self::applyVolume($playerEq, $next['trigger']);
+            // Lancer le média
             $launched = $playerEq->playMedia($next['trigger']['media_id'], 'play_now');
             if (isset($launched['error'])) {
                 log::add('jellyfin', 'error', 'playMedia a échoué: ' . $next['trigger']['media_id'] . ' — ' . $launched['error']);
@@ -1454,6 +1461,36 @@ public function remoteControl($commandName, $_options = null) {
         log::add('jellyfin', 'info', 'Warm-up média: ' . $mediaId . ' (préparation stream Jellyfin)');
     }
 
+    /**
+     * Applique le volume ampli avant un clip si configuré.
+     */
+    private static function applyVolume($playerEq, $trigger) {
+        $ampCmdId = $playerEq->getConfiguration('amp_volume_cmd_id');
+        if (empty($ampCmdId)) return; // Pas d'ampli configuré
+
+        $volume = null;
+        if (isset($trigger['volume']) && $trigger['volume'] !== '' && $trigger['volume'] !== null) {
+            $volume = (int)$trigger['volume'];
+        } else {
+            $defaultVol = $playerEq->getConfiguration('amp_default_volume');
+            if ($defaultVol !== '' && $defaultVol !== null) {
+                $volume = (int)$defaultVol;
+            }
+        }
+
+        if ($volume === null) return; // Pas de volume à appliquer
+
+        try {
+            $cmd = cmd::byId($ampCmdId);
+            if (is_object($cmd)) {
+                $cmd->execCmd(['slider' => $volume]);
+                log::add('jellyfin', 'info', 'Volume ampli: ' . $volume . ' (cmd #' . $ampCmdId . ')');
+            }
+        } catch (Exception $e) {
+            log::add('jellyfin', 'warning', 'Erreur volume ampli: ' . $e->getMessage());
+        }
+    }
+
     private static function collectAllRemainingMediaIds($sections, $currentSection, $currentIndex) {
         $mediaIds = [];
         $sectionOrder = self::SECTION_ORDER;
@@ -1582,6 +1619,7 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
+                self::applyVolume($playerEq, $trigger);
 
                 if ($sessionType == 'commercial') {
                     // Commercial : envoyer toute la playlist restante

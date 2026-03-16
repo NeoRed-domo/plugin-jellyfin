@@ -782,6 +782,11 @@ var SessionEditor = {
                     html += '  <span style="' + badgeStyle + '">' + t.audio_info + '</span>';
                 }
             }
+            if (t.type == 'media' && t.volume !== undefined && t.volume !== null && t.volume !== '') {
+                html += '  <span class="cursor" style="color:#f39c12; font-size:10px;" onclick="event.stopPropagation(); SessionEditor.editVolume(\'' + sectionKey + '\',' + i + ')" title="' + _t('Volume ampli') + '"><i class="fas fa-volume-up"></i> ' + t.volume + '</span>';
+            } else if (t.type == 'media') {
+                html += '  <span class="cursor" style="color:#555; font-size:10px;" onclick="event.stopPropagation(); SessionEditor.editVolume(\'' + sectionKey + '\',' + i + ')" title="' + _t('Définir le volume (optionnel)') + '"><i class="fas fa-volume-off"></i></span>';
+            }
             if (durStr) html += '  <span style="color:#666; font-size:11px;">' + durStr + '</span>';
             html += '  <span style="display:flex; gap:3px;">';
             if (i > 0) html += '    <i class="fas fa-arrow-up cursor" style="color:#666;" onclick="SessionEditor.moveTrigger(\'' + sectionKey + '\',' + i + ',-1)"></i>';
@@ -1065,6 +1070,38 @@ var SessionEditor = {
                     $('#div_alert').showAlert({ message: _t('Séance arrêtée'), level: 'success' });
                     SessionEditor.pollStatus();
                 }
+            }
+        });
+    },
+
+    editVolume: function(sectionKey, index) {
+        var triggers = SessionEditor.getTriggers(sectionKey);
+        var t = triggers[index];
+        var currentVol = (t.volume !== undefined && t.volume !== null && t.volume !== '') ? t.volume : '';
+        bootbox.dialog({
+            title: '<i class="fas fa-volume-up"></i> ' + _t('Volume ampli') + ' — ' + (t.name || ''),
+            message: '<div class="form-group">' +
+                '<label>' + _t('Volume (0-100, vide = défaut lecteur)') + '</label>' +
+                '<input type="number" id="input_trigger_volume" class="form-control" min="0" max="100" value="' + currentVol + '" placeholder="' + _t('Défaut') + '">' +
+                '</div>' +
+                '<div class="text-muted" style="font-size:11px;">' + _t('Laissez vide pour utiliser le volume par défaut du lecteur. Nécessite une commande ampli configurée sur le lecteur.') + '</div>',
+            buttons: {
+                clear: { label: _t('Effacer'), className: 'btn-warning', callback: function() {
+                    delete triggers[index].volume;
+                    SessionEditor.setTriggers(sectionKey, triggers);
+                    SessionEditor.save(function() { SessionEditor.reload(); });
+                }},
+                cancel: { label: _t('Annuler'), className: 'btn-default' },
+                confirm: { label: _t('Valider'), className: 'btn-success', callback: function() {
+                    var val = $('#input_trigger_volume').val();
+                    if (val !== '' && val !== null) {
+                        triggers[index].volume = parseInt(val);
+                    } else {
+                        delete triggers[index].volume;
+                    }
+                    SessionEditor.setTriggers(sectionKey, triggers);
+                    SessionEditor.save(function() { SessionEditor.reload(); });
+                }}
             }
         });
     },
