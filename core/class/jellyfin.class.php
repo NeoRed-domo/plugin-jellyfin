@@ -780,7 +780,7 @@ public function remoteControl($commandName, $_options = null) {
     }
 
     public function stopSession() {
-        log::add('jellyfin', 'info', 'stopSession() appelé pour: ' . $this->getName());
+        log::add('jellyfin', 'info', 'Séance arrêtée: ' . $this->getName());
         $this->checkAndUpdateCmd('state', 'stopped');
         $this->checkAndUpdateCmd('current_section', '');
         $this->checkAndUpdateCmd('progress', 0);
@@ -793,13 +793,13 @@ public function remoteControl($commandName, $_options = null) {
     }
 
     public function pauseSession() {
-        log::add('jellyfin', 'info', 'pauseSession() appelé pour: ' . $this->getName());
+        log::add('jellyfin', 'info', 'Séance en pause: ' . $this->getName());
         $this->checkAndUpdateCmd('state', 'paused');
         return ['state' => 'ok'];
     }
 
     public function resumeSession() {
-        log::add('jellyfin', 'info', 'resumeSession() appelé pour: ' . $this->getName());
+        log::add('jellyfin', 'info', 'Séance reprise: ' . $this->getName());
         $this->checkAndUpdateCmd('state', 'playing');
         $sessionData = $this->getConfiguration('session_data');
         $playerId = is_array($sessionData) ? ($sessionData['player_id'] ?? null) : null;
@@ -1039,9 +1039,9 @@ public function remoteControl($commandName, $_options = null) {
                     cache::set($cacheKey, json_encode($engineState));
                     return; // Attente auto-avancement client (max 2s)
                 }
-                log::add('jellyfin', 'info', 'STATE3: Auto-avancement non détecté après 2s, fallback');
+                log::add('jellyfin', 'debug', 'Playlist auto-avancement non détecté, fallback');
             }
-            log::add('jellyfin', 'info', 'STATE3: Média terminé, enchaînement: ' . $currentMediaId);
+            log::add('jellyfin', 'debug', 'Média terminé, enchaînement: ' . $currentMediaId);
             unset($engineState['stopped_since']);
             unset($engineState['stuck_since']);
             unset($engineState['last_position_ticks']);
@@ -1326,7 +1326,7 @@ public function remoteControl($commandName, $_options = null) {
         $url = $config['baseUrl'] . '/Sessions/' . $jellyfinSessionId . '/Queue?ItemIds=' . $allIds . '&Mode=PlayNext&api_key=' . $config['apikey'];
         self::requestApi($url, 'POST', null, false, 2);
         $engineState['queued'] = true;
-        log::add('jellyfin', 'info', 'Playlist complète queue: ' . count($mediaIds) . ' médias');
+        log::add('jellyfin', 'debug', 'Queue playlist: ' . count($mediaIds) . ' médias');
     }
 
     private static function tickCommercial($sessionEq, $playerEq, $sessionData, &$engineState, $cacheKey, $status, $itemId, $positionTicks, $runTimeTicks, $config, $jellyfinSessionId) {
@@ -1345,7 +1345,7 @@ public function remoteControl($commandName, $_options = null) {
         // Média terminé → enchaîner (même logique que tickCinema STATE 3)
         $launchAt = $engineState['media_launch_at'] ?? 0;
         if ($status == 'Stopped' && !empty($currentMediaId) && $launchAt == 0) {
-            log::add('jellyfin', 'info', 'Commercial: média terminé, enchaînement');
+            log::add('jellyfin', 'debug', 'Commercial: média terminé, enchaînement');
             self::skipToNextTrigger($sessionEq, $playerEq, $sessionData, $engineState, $cacheKey, $config);
             return;
         }
@@ -1398,7 +1398,7 @@ public function remoteControl($commandName, $_options = null) {
                 $engineState['current_trigger_index'] = $nextIndex;
                 $engineState['current_media_id'] = $nextMedia['media_id'];
                 $engineState['queued'] = false;
-                log::add('jellyfin', 'info', 'Commercial NextTrack anticipé → index ' . $nextIndex);
+                log::add('jellyfin', 'debug', 'Commercial NextTrack anticipé → index ' . $nextIndex);
                 // Queue le suivant pour la prochaine transition
                 if ($jellyfinSessionId) {
                     $nextNextIndex = ($nextIndex + 1 >= count($playlist)) ? ($loop ? 0 : -1) : $nextIndex + 1;
@@ -1458,7 +1458,7 @@ public function remoteControl($commandName, $_options = null) {
             'EnableTranscoding' => true,
             'AutoOpenLiveStream' => true
         ], false, 2);
-        log::add('jellyfin', 'info', 'Warm-up média: ' . $mediaId . ' (préparation stream Jellyfin)');
+        log::add('jellyfin', 'debug', 'Warm-up média: ' . $mediaId);
     }
 
     /**
@@ -1633,7 +1633,7 @@ public function remoteControl($commandName, $_options = null) {
                     }
                     self::playMediaPlaylist($playerEq, $allMediaIds, $config);
                     $engineState['queued'] = (count($allMediaIds) > 1);
-                    log::add('jellyfin', 'info', 'Commercial PlayNow: ' . count($allMediaIds) . ' médias');
+                    log::add('jellyfin', 'debug', 'Commercial PlayNow: ' . count($allMediaIds) . ' médias');
                 } else {
                     // Cinéma : envoyer ce média + les suivants cross-sections
                     $allMediaIds = [$trigger['media_id']];
@@ -1642,7 +1642,7 @@ public function remoteControl($commandName, $_options = null) {
                     $allMediaIds = array_merge($allMediaIds, $remaining);
                     self::playMediaPlaylist($playerEq, $allMediaIds, $config);
                     $engineState['queued'] = (count($allMediaIds) > 1);
-                    log::add('jellyfin', 'info', 'PlayNow playlist: ' . count($allMediaIds) . ' médias (premier: ' . $trigger['media_id'] . ')');
+                    log::add('jellyfin', 'debug', 'PlayNow playlist: ' . count($allMediaIds) . ' médias');
                 }
 
                 $engineState['media_launch_at'] = time();
