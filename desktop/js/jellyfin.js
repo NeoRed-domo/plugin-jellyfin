@@ -1601,8 +1601,13 @@ var AudioCalibration = {
                     '<div id="calib-status" style="margin-top:5px; font-size:11px; color:#888;"></div></div>' +
                     '<hr>' +
                     '<div class="form-group"><label>1. ' + _t('Média de référence') + '</label>' +
+                    '<div style="background:#1a1a1a; padding:8px; border-radius:4px; margin-bottom:8px;">' +
+                    '<div style="font-size:11px; color:#888; margin-bottom:5px;"><i class="fas fa-info-circle"></i> ' + _t('Utilisez un bruit rose à -24 LUFS (standard broadcast). Générez-le ci-dessous, importez-le dans Jellyfin, puis sélectionnez-le.') + '</div>' +
+                    '<button class="btn btn-xs btn-warning" id="calib-gen-pink"><i class="fas fa-wave-square"></i> ' + _t('Générer le bruit rose') + '</button> ' +
+                    '<span id="calib-pink-status" style="font-size:11px; color:#666;"></span>' +
+                    '</div>' +
                     '<div id="calib-media-display" style="color:#aaa; font-size:12px;">' + _t('Aucun') + '</div>' +
-                    '<button class="btn btn-xs btn-primary" id="calib-pick-media"><i class="fas fa-film"></i> ' + _t('Sélectionner') + '</button></div>' +
+                    '<button class="btn btn-xs btn-primary" id="calib-pick-media"><i class="fas fa-film"></i> ' + _t('Sélectionner dans Jellyfin') + '</button></div>' +
                     '<div class="form-group"><label>2. ' + _t('Écoute') + '</label><br>' +
                     '<button class="btn btn-xs btn-success" id="calib-play"><i class="fas fa-play"></i> ' + _t('Lire en boucle') + '</button> ' +
                     '<button class="btn btn-xs btn-danger" id="calib-stop"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>' +
@@ -1625,6 +1630,33 @@ var AudioCalibration = {
                             AudioCalibration.save();
                         }}
                     }
+                });
+
+                // Génération bruit rose
+                $('#calib-gen-pink').on('click', function() {
+                    var btn = $(this);
+                    btn.html('<i class="fas fa-spinner fa-spin"></i> ' + _t('Génération...'));
+                    $.ajax({
+                        type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'generate_pink_noise' }, dataType: 'json', timeout: 30000,
+                        success: function(data) {
+                            btn.html('<i class="fas fa-wave-square"></i> ' + _t('Générer le bruit rose'));
+                            if (data.state == 'ok') {
+                                var r = data.result;
+                                $('#calib-pink-status').html(
+                                    '<span style="color:#1DB954;"><i class="fas fa-check"></i> ' + _t('Généré') + ' (' + r.size + ', LUFS: ' + r.lufs.toFixed(1) + ')</span><br>' +
+                                    '<a href="' + r.file + '" download style="color:#3498db; font-size:11px;"><i class="fas fa-download"></i> ' + _t('Télécharger') + '</a>' +
+                                    '<span style="color:#888; font-size:10px; margin-left:8px;">' + _t('Importez ce fichier dans Jellyfin, puis sélectionnez-le ci-dessous.') + '</span>'
+                                );
+                            } else {
+                                $('#calib-pink-status').html('<span style="color:#e74c3c;">' + (data.result || _t('Erreur')) + '</span>');
+                            }
+                        },
+                        error: function() {
+                            btn.html('<i class="fas fa-wave-square"></i> ' + _t('Générer le bruit rose'));
+                            $('#calib-pink-status').html('<span style="color:#e74c3c;">' + _t('Erreur réseau') + '</span>');
+                        }
+                    });
                 });
 
                 // Events

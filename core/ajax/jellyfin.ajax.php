@@ -551,6 +551,44 @@ if (init('action') == 'add') {
 
     /* ************************* Actions Audio ************************* */
 
+    if (init('action') == 'generate_pink_noise') {
+        if (!jellyfin::isFfmpegAvailable()) {
+            throw new Exception(__('ffmpeg non installé', __FILE__));
+        }
+        $dataDir = __DIR__ . '/../../data';
+        if (!is_dir($dataDir)) mkdir($dataDir, 0775, true);
+        $outputFile = $dataDir . '/reference_pink_noise_-24LUFS.wav';
+
+        // Générer 30s de bruit rose normalisé à -24 LUFS (standard broadcast EBU R128)
+        $cmd = 'ffmpeg -y -f lavfi -i "anoisesrc=d=30:c=pink:a=0.1" '
+             . '-af "loudnorm=I=-24:TP=-1:LRA=7:print_format=summary" '
+             . '-ar 48000 -c:a pcm_s16le '
+             . escapeshellarg($outputFile) . ' 2>&1';
+        exec($cmd, $output, $returnVar);
+
+        if ($returnVar != 0 || !file_exists($outputFile)) {
+            throw new Exception(__('Erreur génération bruit rose', __FILE__) . ': ' . implode("\n", array_slice($output, -5)));
+        }
+
+        // Vérifier le LUFS du fichier généré
+        $lufsCmd = 'ffmpeg -i ' . escapeshellarg($outputFile) . ' -af loudnorm=print_format=json -f null - 2>&1';
+        $lufsOutput = [];
+        exec($lufsCmd, $lufsOutput);
+        $lufsText = implode("\n", $lufsOutput);
+        $lufs = -24.0;
+        if (preg_match('/"input_i"\s*:\s*"([^"]+)"/', $lufsText, $matches)) {
+            $lufs = (float)$matches[1];
+        }
+
+        $fileSize = round(filesize($outputFile) / 1024);
+        ajax::success([
+            'file' => 'plugins/jellyfin/data/reference_pink_noise_-24LUFS.wav',
+            'lufs' => $lufs,
+            'size' => $fileSize . ' Ko',
+            'message' => __('Fichier généré. Importez-le dans votre bibliothèque Jellyfin.', __FILE__)
+        ]);
+    }
+
     if (init('action') == 'check_ffmpeg') {
         ajax::success(['available' => jellyfin::isFfmpegAvailable()]);
     }
