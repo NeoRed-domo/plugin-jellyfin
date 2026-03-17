@@ -16,12 +16,12 @@ if (!$filePath || strpos($filePath, $dataDir) !== 0 || !file_exists($filePath)) 
     die('File not found');
 }
 
-$ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-$mimeTypes = ['wav' => 'audio/wav', 'mp3' => 'audio/mpeg', 'flac' => 'audio/flac'];
-$mime = $mimeTypes[$ext] ?? 'application/octet-stream';
-
-header('Content-Type: ' . $mime);
+header('Content-Type: application/octet-stream');
 header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
 header('Content-Length: ' . filesize($filePath));
+header('Cache-Control: no-cache');
+ob_clean();
+flush();
 readfile($filePath);
+exit;
 ?>

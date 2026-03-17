@@ -1645,8 +1645,8 @@ var AudioCalibration = {
                                 var r = data.result;
                                 $('#calib-pink-status').html(
                                     '<span style="color:#1DB954;"><i class="fas fa-check"></i> ' + _t('Généré') + ' (' + r.size + ', LUFS: ' + r.lufs.toFixed(1) + ')</span><br>' +
-                                    '<a href="' + r.file + '" download style="color:#3498db; font-size:11px;"><i class="fas fa-download"></i> ' + _t('Télécharger') + '</a>' +
-                                    '<span style="color:#888; font-size:10px; margin-left:8px;">' + _t('Importez ce fichier dans Jellyfin, puis sélectionnez-le ci-dessous.') + '</span>'
+                                    '<button class="btn btn-xs btn-info" onclick="window.open(\'' + r.file + '\', \'_blank\')"><i class="fas fa-download"></i> ' + _t('Télécharger') + '</button> ' +
+                                    '<span style="color:#888; font-size:10px;">' + _t('Importez ce fichier dans Jellyfin, puis sélectionnez-le ci-dessous.') + '</span>'
                                 );
                             } else {
                                 $('#calib-pink-status').html('<span style="color:#e74c3c;">' + (data.result || _t('Erreur')) + '</span>');
