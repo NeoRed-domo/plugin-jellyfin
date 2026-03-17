@@ -1137,7 +1137,7 @@ public function remoteControl($commandName, $_options = null) {
                     // Volume ampli pour le nouveau clip
                     $foundTriggers = $sections[$found['section']]['triggers'] ?? [];
                     if (isset($foundTriggers[$found['index']])) {
-                        self::applyVolume($playerEq, $foundTriggers[$found['index']]);
+                        self::applyVolume($playerEq, $foundTriggers[$found['index']], $found['section']);
                     }
                 }
             }
@@ -1273,7 +1273,8 @@ public function remoteControl($commandName, $_options = null) {
             self::transitionTo($sessionEq, $engineState, $next, $previousSection);
 
             // Volume ampli si configuré
-            self::applyVolume($playerEq, $next['trigger']);
+            $sectionKey = ($next['section'] == 'playlist') ? 'commercial' : $next['section'];
+            self::applyVolume($playerEq, $next['trigger'], $sectionKey);
             // Lancer le média
             $launched = $playerEq->playMedia($next['trigger']['media_id'], 'play_now');
             if (isset($launched['error'])) {
@@ -1484,22 +1485,32 @@ public function remoteControl($commandName, $_options = null) {
     /**
      * Applique le volume ampli avant un clip si configuré.
      */
-    private static function applyVolume($playerEq, $trigger) {
+    private static function applyVolume($playerEq, $trigger, $sectionKey = '') {
         $ampCmdId = $playerEq->getConfiguration('amp_volume_cmd_id');
-        if (empty($ampCmdId) || !is_numeric($ampCmdId)) return; // Pas d'ampli configuré
-        log::add('jellyfin', 'debug', 'applyVolume: ampCmdId=' . $ampCmdId . ', trigger.volume=' . ($trigger['volume'] ?? 'non défini'));
+        if (empty($ampCmdId) || !is_numeric($ampCmdId)) return;
 
         $volume = null;
+
+        // 1. Override manuel (priorité absolue)
         if (isset($trigger['volume']) && $trigger['volume'] !== '' && $trigger['volume'] !== null) {
             $volume = (int)$trigger['volume'];
-        } else {
+        }
+        // 2. Volume auto (calculé par normalisation LUFS) + profil dynamique
+        elseif (isset($trigger['volume_auto']) && $trigger['volume_auto'] !== '' && $trigger['volume_auto'] !== null) {
+            $profileCmd = $playerEq->getCmd('info', 'audio_profile');
+            $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'cinema';
+            $profileOffset = (float)config::byKey('audio_profile_' . $profile, 'jellyfin', 0);
+            $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $profileOffset));
+        }
+        // 3. Volume par défaut
+        else {
             $defaultVol = $playerEq->getConfiguration('amp_default_volume');
             if ($defaultVol !== '' && $defaultVol !== null) {
                 $volume = (int)$defaultVol;
             }
         }
 
-        if ($volume === null) return; // Pas de volume à appliquer
+        if ($volume === null) return;
 
         try {
             $cmd = cmd::byId($ampCmdId);
@@ -1510,6 +1521,64 @@ public function remoteControl($commandName, $_options = null) {
         } catch (Exception $e) {
             log::add('jellyfin', 'warning', 'Erreur volume ampli: ' . $e->getMessage());
         }
+    }
+
+    public static function analyzeLufs($mediaId, $mode = 'quick') {
+        if (!self::isFfmpegAvailable()) {
+            return ['error' => 'ffmpeg non installé'];
+        }
+        $config = self::getBaseConfig();
+        if (!$config) return ['error' => 'Configuration Jellyfin incomplète'];
+
+        // Vérifier le cache (sauf mode force)
+        if ($mode != 'force') {
+            $cacheKey = 'jellyfin::lufs::' . $mediaId;
+            $cached = cache::byKey($cacheKey)->getValue(null);
+            if ($cached !== null) {
+                return ['lufs' => (float)$cached, 'cached' => true];
+            }
+        }
+
+        // URL de streaming
+        $streamUrl = $config['baseUrl'] . '/Videos/' . $mediaId . '/stream?static=true&api_key=' . $config['apikey'];
+
+        // Mode rapide : seek au milieu
+        $timeLimit = '';
+        if ($mode == 'quick') {
+            $userId = self::getPrimaryUserId();
+            if ($userId) {
+                $itemUrl = $config['baseUrl'] . '/Users/' . $userId . '/Items/' . $mediaId . '?api_key=' . $config['apikey'];
+                $itemData = self::requestApi($itemUrl);
+                if ($itemData && isset($itemData['RunTimeTicks'])) {
+                    $midpoint = (int)($itemData['RunTimeTicks'] / 2);
+                    $streamUrl .= '&startTimeTicks=' . $midpoint;
+                }
+            }
+            $timeLimit = '-t 60';
+        }
+
+        // Commande ffmpeg
+        $cmd = 'curl -s "' . $streamUrl . '" | ffmpeg -i pipe:0 -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
+        $output = [];
+        exec($cmd, $output, $returnVar);
+        $fullOutput = implode("\n", $output);
+
+        // Parser le LUFS
+        if (preg_match('/"input_i"\s*:\s*"([^"]+)"/', $fullOutput, $matches)) {
+            $lufs = (float)$matches[1];
+            cache::set('jellyfin::lufs::' . $mediaId, $lufs);
+            return ['lufs' => $lufs, 'cached' => false];
+        }
+
+        return ['error' => 'Impossible de mesurer le LUFS', 'output' => substr($fullOutput, -500)];
+    }
+
+    public static function calculateAutoVolume($playerEq, $clipLufs, $sectionKey) {
+        $refVolume = (float)$playerEq->getConfiguration('audio_ref_volume', 0);
+        $refLufs = (float)$playerEq->getConfiguration('audio_ref_lufs', -23);
+        $sectionOffset = (float)config::byKey('audio_offset_' . $sectionKey, 'jellyfin', 0);
+        $volume = $refVolume + ($refLufs - $clipLufs) + $sectionOffset;
+        return (int)max(0, min(100, $volume));
     }
 
     private static function collectAllRemainingMediaIds($sections, $currentSection, $currentIndex) {
@@ -1640,7 +1709,8 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
-                self::applyVolume($playerEq, $trigger);
+                $sectionKey = ($sessionType == 'commercial') ? 'commercial' : $section;
+                self::applyVolume($playerEq, $trigger, $sectionKey);
 
                 if ($sessionType == 'commercial') {
                     // Commercial : envoyer toute la playlist restante
