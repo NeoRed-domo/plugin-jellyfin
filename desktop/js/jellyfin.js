@@ -666,8 +666,12 @@ var SessionEditor = {
         html += '    <button class="btn btn-sm btn-danger" onclick="SessionEditor.stopSession()" style="display:none;" id="session-stop-btn"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>';
         html += '    <button class="btn btn-sm btn-default" onclick="CalibrationModal.openFromEditor()"><i class="fas fa-crosshairs"></i> ' + _t('Calibrer tops') + '</button>';
         html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.refreshDurations()"><i class="fas fa-sync"></i> ' + _t('Rafraîchir durées') + '</button>';
+        html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.normalizeAudio()"><i class="fas fa-volume-up"></i> ' + _t('Normaliser le son') + '</button>';
         html += '  </div>';
         html += '</div>';
+        if (SessionEditor.sessionData && SessionEditor.sessionData.audio_calibrated) {
+            html += '<div style="color:#1DB954; font-size:11px; margin-top:5px;"><i class="fas fa-check"></i> ' + _t('Son normalisé') + '</div>';
+        }
 
         // Panneau monitoring live
         html += '<div id="session-monitor" style="margin-top:10px; padding:12px; background:#111; border:1px solid #333; border-radius:4px; display:none;">';
@@ -717,6 +721,7 @@ var SessionEditor = {
         html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
         html += '    <button class="btn btn-sm btn-danger" onclick="SessionEditor.stopSession()" style="display:none;" id="session-stop-btn"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>';
         html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.refreshDurations()"><i class="fas fa-sync"></i> ' + _t('Rafraîchir durées') + '</button>';
+        html += '    <button class="btn btn-sm btn-default" onclick="SessionEditor.normalizeAudio()"><i class="fas fa-volume-up"></i> ' + _t('Normaliser le son') + '</button>';
         html += '  </div>';
         html += '</div>';
 
@@ -783,7 +788,9 @@ var SessionEditor = {
                 }
             }
             if (t.type == 'media' && t.volume !== undefined && t.volume !== null && t.volume !== '') {
-                html += '  <span class="cursor" style="color:#f39c12; font-size:10px;" onclick="event.stopPropagation(); SessionEditor.editVolume(\'' + sectionKey + '\',' + i + ')" title="' + _t('Volume ampli') + '"><i class="fas fa-volume-up"></i> ' + t.volume + '</span>';
+                html += '  <span class="cursor" style="color:#f39c12; font-size:10px;" onclick="event.stopPropagation(); SessionEditor.editVolume(\'' + sectionKey + '\',' + i + ')" title="' + _t('Volume forcé') + '"><i class="fas fa-volume-up"></i> ' + t.volume + '</span>';
+            } else if (t.type == 'media' && t.volume_auto !== undefined && t.volume_auto !== null && t.volume_auto !== '') {
+                html += '  <span class="cursor" style="color:#1DB954; font-size:10px;" onclick="event.stopPropagation(); SessionEditor.editVolume(\'' + sectionKey + '\',' + i + ')" title="' + _t('Volume auto (LUFS)') + '"><i class="fas fa-volume-up"></i> auto:' + t.volume_auto + '</span>';
             } else if (t.type == 'media') {
                 html += '  <span class="cursor" style="color:#555; font-size:10px;" onclick="event.stopPropagation(); SessionEditor.editVolume(\'' + sectionKey + '\',' + i + ')" title="' + _t('Définir le volume (optionnel)') + '"><i class="fas fa-volume-off"></i></span>';
             }
@@ -1213,6 +1220,80 @@ var SessionEditor = {
         });
     },
 
+    normalizeAudio: function() {
+        $.ajax({
+            type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'check_ffmpeg' }, dataType: 'json',
+            success: function(data) {
+                if (data.state != 'ok' || !data.result.available) {
+                    bootbox.alert(_t('ffmpeg n\'est pas installé. Lancez l\'installation des dépendances.'));
+                    return;
+                }
+                bootbox.dialog({
+                    title: '<i class="fas fa-volume-up"></i> ' + _t('Normalisation audio'),
+                    message: _t('Choisissez le mode d\'analyse :'),
+                    buttons: {
+                        quick: { label: _t('Analyse rapide (~10-30s/clip)'), className: 'btn-primary',
+                            callback: function() { SessionEditor._runAnalysis('quick'); } },
+                        complete: { label: _t('Analyse complète (~30-60s/clip)'), className: 'btn-default',
+                            callback: function() { SessionEditor._runAnalysis('complete'); } },
+                        cancel: { label: _t('Annuler'), className: 'btn-default' }
+                    }
+                });
+            }
+        });
+    },
+
+    _runAnalysis: function(mode) {
+        var html = '<div id="audio-analysis-progress" style="padding:20px;">' +
+            '<div style="text-align:center; margin-bottom:15px;"><i class="fas fa-spinner fa-spin fa-2x" style="color:#1DB954;"></i></div>' +
+            '<div id="analysis-status" style="color:#aaa; text-align:center;">' + _t('Démarrage...') + '</div>' +
+            '<div style="margin-top:10px; height:6px; background:#333; border-radius:3px;">' +
+            '  <div id="analysis-bar" style="height:100%; background:#1DB954; border-radius:3px; width:0%; transition:width 0.5s;"></div>' +
+            '</div>' +
+            '<div id="analysis-log" style="margin-top:15px; max-height:200px; overflow-y:auto; font-size:11px; color:#888;"></div>' +
+            '</div>';
+
+        bootbox.dialog({
+            title: '<i class="fas fa-volume-up"></i> ' + _t('Analyse audio en cours'),
+            message: html, closeButton: false, buttons: {}
+        });
+
+        $.ajax({
+            type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'analyze_session_audio', id: SessionEditor.eqLogicId, mode: mode },
+            dataType: 'json', global: false, timeout: 600000
+        });
+
+        SessionEditor._analysisPoll = setInterval(function() {
+            $.ajax({
+                type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                data: { action: 'get_analysis_progress', id: SessionEditor.eqLogicId },
+                dataType: 'json', global: false,
+                success: function(data) {
+                    if (data.state != 'ok') return;
+                    var p = data.result;
+                    if (p.status == 'analyzing') {
+                        var pct = p.total_clips > 0 ? Math.round((p.current_index / p.total_clips) * 100) : 0;
+                        $('#analysis-bar').css('width', pct + '%');
+                        $('#analysis-status').html('<i class="fas fa-music"></i> ' + p.current_clip + ' (' + p.current_index + '/' + p.total_clips + ')');
+                        var logHtml = '';
+                        (p.results || []).forEach(function(r) { logHtml += '<div style="color:#1DB954;">\u2713 LUFS: ' + r.lufs.toFixed(1) + ' \u2192 vol: ' + r.volume_auto + '</div>'; });
+                        (p.errors || []).forEach(function(e) { logHtml += '<div style="color:#e74c3c;">\u2717 ' + e.name + ': ' + e.error + '</div>'; });
+                        $('#analysis-log').html(logHtml);
+                    } else if (p.status == 'done') {
+                        clearInterval(SessionEditor._analysisPoll);
+                        var total = (p.results || []).length;
+                        var errs = (p.errors || []).length;
+                        $('#analysis-bar').css('width', '100%');
+                        $('#analysis-status').html('<i class="fas fa-check" style="color:#1DB954;"></i> ' + total + ' clip(s) ' + _t('normalisé(s)') + (errs > 0 ? ' (' + errs + ' ' + _t('erreur(s)') + ')' : ''));
+                        setTimeout(function() { bootbox.hideAll(); SessionEditor.reload(); }, 2000);
+                    }
+                }
+            });
+        }, 2000);
+    },
+
     refreshDurations: function() {
         $.ajax({
             type: 'POST',
@@ -1484,5 +1565,198 @@ var CalibrationModal = {
         var m = Math.floor((sec % 3600) / 60);
         var s = Math.floor(sec % 60);
         return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    }
+};
+
+// --- CALIBRATION AUDIO ---
+
+$('body').off('click', '.eqLogicAction[data-action=audio_calibration]').on('click', '.eqLogicAction[data-action=audio_calibration]', function() {
+    AudioCalibration.open();
+});
+
+var AudioCalibration = {
+    playerId: null,
+    mediaId: null,
+    mediaName: null,
+
+    open: function() {
+        var playersHtml = '<option value="">' + _t('Sélectionner...') + '</option>';
+        // On récupère les lecteurs via AJAX all
+        $.ajax({
+            type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'all' }, dataType: 'json', global: false,
+            success: function(data) {
+                if (data.state != 'ok') return;
+                data.result.forEach(function(eq) {
+                    if (!eq.configuration || eq.configuration.session_type) return;
+                    if (!eq.configuration.amp_volume_cmd_id) return;
+                    var calibrated = (eq.configuration.audio_ref_volume && eq.configuration.audio_ref_lufs);
+                    var badge = calibrated ? ' \u2713' : ' \u26A0';
+                    playersHtml += '<option value="' + eq.id + '" data-ref-vol="' + (eq.configuration.audio_ref_volume || '') + '" data-ref-lufs="' + (eq.configuration.audio_ref_lufs || '') + '" data-ref-media="' + (eq.configuration.audio_ref_media_id || '') + '" data-has-info="' + (eq.configuration.amp_volume_info_cmd_id ? '1' : '0') + '">' + eq.name + badge + '</option>';
+                });
+
+                var html = '<div style="padding:10px;">' +
+                    '<div class="form-group"><label>' + _t('Lecteur') + '</label>' +
+                    '<select id="calib-player" class="form-control">' + playersHtml + '</select>' +
+                    '<div id="calib-status" style="margin-top:5px; font-size:11px; color:#888;"></div></div>' +
+                    '<hr>' +
+                    '<div class="form-group"><label>1. ' + _t('Média de référence') + '</label>' +
+                    '<div id="calib-media-display" style="color:#aaa; font-size:12px;">' + _t('Aucun') + '</div>' +
+                    '<button class="btn btn-xs btn-primary" id="calib-pick-media"><i class="fas fa-film"></i> ' + _t('Sélectionner') + '</button></div>' +
+                    '<div class="form-group"><label>2. ' + _t('Écoute') + '</label><br>' +
+                    '<button class="btn btn-xs btn-success" id="calib-play"><i class="fas fa-play"></i> ' + _t('Lire en boucle') + '</button> ' +
+                    '<button class="btn btn-xs btn-danger" id="calib-stop"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>' +
+                    '<div style="font-size:11px; color:#666; margin-top:4px;">' + _t('Réglez votre ampli au volume idéal.') + '</div></div>' +
+                    '<div class="form-group"><label>3. ' + _t('Volume de référence') + '</label><br>' +
+                    '<button class="btn btn-xs btn-default" id="calib-capture"><i class="fas fa-satellite-dish"></i> ' + _t('Capturer') + '</button> ' +
+                    '<input type="number" id="calib-volume" class="form-control" style="width:100px; display:inline-block;" min="0" max="100" placeholder="50" /></div>' +
+                    '<div class="form-group"><label>4. ' + _t('Analyse LUFS') + '</label><br>' +
+                    '<button class="btn btn-xs btn-default" id="calib-analyze"><i class="fas fa-search"></i> ' + _t('Analyser') + '</button> ' +
+                    '<span id="calib-lufs" style="font-family:monospace; color:#aaa;">--</span></div>' +
+                    '</div>';
+
+                var modal = bootbox.dialog({
+                    title: '<i class="fas fa-volume-up"></i> ' + _t('Calibration Audio'),
+                    message: html,
+                    size: 'large',
+                    buttons: {
+                        cancel: { label: _t('Annuler'), className: 'btn-default' },
+                        save: { label: '<i class="fas fa-save"></i> ' + _t('Sauvegarder'), className: 'btn-success', callback: function() {
+                            AudioCalibration.save();
+                        }}
+                    }
+                });
+
+                // Events
+                $('#calib-player').on('change', function() {
+                    var $opt = $(this).find(':selected');
+                    AudioCalibration.playerId = $(this).val();
+                    var refVol = $opt.data('ref-vol');
+                    var refLufs = $opt.data('ref-lufs');
+                    var hasInfo = $opt.data('has-info') == '1';
+                    if (refVol && refLufs) {
+                        $('#calib-status').html('<span style="color:#1DB954;">\u2713 ' + _t('Calibré') + ' (vol: ' + refVol + ', LUFS: ' + refLufs + ')</span>');
+                        $('#calib-volume').val(refVol);
+                        $('#calib-lufs').text(refLufs);
+                    } else {
+                        $('#calib-status').html('<span style="color:#f39c12;">\u26A0 ' + _t('Non calibré') + '</span>');
+                    }
+                    $('#calib-capture').prop('disabled', !hasInfo);
+                });
+
+                $('#calib-pick-media').on('click', function() {
+                    var $m = modal;
+                    $m.css('z-index', 0);
+                    if (typeof JellyfinBrowser !== 'undefined') {
+                        JellyfinBrowser.open(AudioCalibration.playerId || '', '');
+                        setTimeout(function() {
+                            var $btn = $('.jellyfin-modal-fullscreen .btn-success');
+                            $btn.off('click').html('<i class="fas fa-check"></i> ' + _t('Sélectionner'));
+                            $btn.on('click', function() {
+                                if (JellyfinBrowser.selectedItem) {
+                                    AudioCalibration.mediaId = JellyfinBrowser.selectedItem.Id;
+                                    AudioCalibration.mediaName = JellyfinBrowser.selectedItem.Name;
+                                    $('#calib-media-display').html('<i class="fas fa-film" style="color:#3498db;"></i> ' + AudioCalibration.mediaName);
+                                    bootbox.hideAll();
+                                    $m.css('z-index', '');
+                                    AudioCalibration.open(); // Reopen calibration
+                                }
+                                return false;
+                            });
+                        }, 500);
+                    }
+                });
+
+                $('#calib-play').on('click', function() {
+                    if (!AudioCalibration.playerId || !AudioCalibration.mediaId) { bootbox.alert(_t('Sélectionnez un lecteur et un média.')); return; }
+                    $.ajax({
+                        type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'play_media', id: AudioCalibration.playerId, mediaId: AudioCalibration.mediaId, mode: 'play_now' },
+                        dataType: 'json'
+                    });
+                });
+
+                $('#calib-stop').on('click', function() {
+                    if (!AudioCalibration.playerId) return;
+                    // Stop via remote control
+                    $.ajax({
+                        type: 'POST', url: 'core/ajax/cmd.ajax.php',
+                        data: { action: 'execCmd', id: '' }, dataType: 'json', global: false
+                    });
+                });
+
+                $('#calib-capture').on('click', function() {
+                    if (!AudioCalibration.playerId) return;
+                    $(this).html('<i class="fas fa-spinner fa-spin"></i>');
+                    var btn = $(this);
+                    $.ajax({
+                        type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'capture_amp_volume', player_id: AudioCalibration.playerId },
+                        dataType: 'json',
+                        success: function(data) {
+                            btn.html('<i class="fas fa-satellite-dish"></i> ' + _t('Capturer'));
+                            if (data.state == 'ok') {
+                                $('#calib-volume').val(data.result.volume);
+                            } else {
+                                bootbox.alert(data.result);
+                            }
+                        }
+                    });
+                });
+
+                $('#calib-analyze').on('click', function() {
+                    if (!AudioCalibration.mediaId) { bootbox.alert(_t('Sélectionnez un média.')); return; }
+                    $(this).html('<i class="fas fa-spinner fa-spin"></i> ' + _t('Analyse...'));
+                    var btn = $(this);
+                    $.ajax({
+                        type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'analyze_lufs', mediaId: AudioCalibration.mediaId, mode: 'complete' },
+                        dataType: 'json', timeout: 120000,
+                        success: function(data) {
+                            btn.html('<i class="fas fa-search"></i> ' + _t('Analyser'));
+                            if (data.state == 'ok') {
+                                $('#calib-lufs').text(data.result.lufs.toFixed(1) + ' LUFS').css('color', '#1DB954');
+                            } else {
+                                $('#calib-lufs').text(_t('Erreur')).css('color', '#e74c3c');
+                            }
+                        }
+                    });
+                });
+
+                // Restore state si on revient après pick media
+                if (AudioCalibration.mediaId) {
+                    $('#calib-media-display').html('<i class="fas fa-film" style="color:#3498db;"></i> ' + AudioCalibration.mediaName);
+                }
+                if (AudioCalibration.playerId) {
+                    $('#calib-player').val(AudioCalibration.playerId).change();
+                }
+            }
+        });
+    },
+
+    save: function() {
+        var volume = $('#calib-volume').val();
+        var lufsText = $('#calib-lufs').text();
+        var lufs = parseFloat(lufsText);
+        if (!AudioCalibration.playerId || !volume || isNaN(lufs)) {
+            bootbox.alert(_t('Veuillez compléter toutes les étapes.'));
+            return false;
+        }
+        $.ajax({
+            type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: {
+                action: 'save_calibration',
+                player_id: AudioCalibration.playerId,
+                ref_volume: volume,
+                ref_lufs: lufs,
+                ref_media_id: AudioCalibration.mediaId || ''
+            },
+            dataType: 'json',
+            success: function(data) {
+                if (data.state == 'ok') {
+                    $('#div_alert').showAlert({ message: _t('Calibration sauvegardée !'), level: 'success' });
+                }
+            }
+        });
     }
 };

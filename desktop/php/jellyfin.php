@@ -26,6 +26,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <br>
                 <span><?php echo __('Nouvelle séance', __FILE__); ?></span>
             </div>
+            <div class="cursor eqLogicAction logoSecondary" data-action="audio_calibration">
+                <i class="fas fa-volume-up"></i>
+                <br>
+                <span><?php echo __('Calibration audio', __FILE__); ?></span>
+            </div>
         </div>
         <legend><i class="fas fa-tv"></i>  <?php echo __('Mes Lecteurs Jellyfin', __FILE__); ?></legend>
         <div class="eqLogicThumbnailContainer">
@@ -152,6 +157,21 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
 
+                        <div class="form-group device-only">
+                            <label class="col-sm-3 control-label"><?php echo __('Commande info volume ampli', __FILE__); ?></label>
+                            <div class="col-sm-4">
+                                <input type="hidden" class="eqLogicAttr" data-l1key="configuration" data-l2key="amp_volume_info_cmd_id" id="amp_volume_info_cmd_id" />
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="amp_volume_info_cmd_display" readonly placeholder="<?php echo __('Aucun (optionnel)', __FILE__); ?>" />
+                                    <span class="input-group-btn">
+                                        <button class="btn btn-default" type="button" id="bt_pick_amp_volume_info"><i class="fas fa-list-alt"></i></button>
+                                        <button class="btn btn-default" type="button" id="bt_clear_amp_volume_info"><i class="fas fa-times"></i></button>
+                                    </span>
+                                </div>
+                                <span class="help-block"><?php echo __('Commande info pour lire le volume actuel (optionnel, pour la calibration audio).', __FILE__); ?></span>
+                            </div>
+                        </div>
+
                         <div class="form-group session-only" style="display:none;">
                             <label class="col-sm-3 control-label"><?php echo __('Type de séance', __FILE__); ?></label>
                             <div class="col-sm-3">
@@ -241,8 +261,29 @@ $eqLogics = eqLogic::byType($plugin->getId());
             } else {
                 $('#amp_volume_cmd_display').val('');
             }
+            // Commande info volume
+            var ampInfoCmdId = _eqLogic.configuration.amp_volume_info_cmd_id;
+            if (ampInfoCmdId && ampInfoCmdId != '' && !isNaN(ampInfoCmdId)) {
+                jeedom.cmd.byId({id: ampInfoCmdId, success: function(cmd) {
+                    if (cmd) $('#amp_volume_info_cmd_display').val(cmd.humanName || ('Cmd #' + ampInfoCmdId));
+                }});
+            } else {
+                $('#amp_volume_info_cmd_display').val('');
+            }
         }
     }
+
+    // Picker commande info volume ampli
+    $('#bt_pick_amp_volume_info').on('click', function() {
+        jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function(result) {
+            $('#amp_volume_info_cmd_id').val(result.cmd.id).change();
+            $('#amp_volume_info_cmd_display').val(result.human);
+        });
+    });
+    $('#bt_clear_amp_volume_info').on('click', function() {
+        $('#amp_volume_info_cmd_id').val('').change();
+        $('#amp_volume_info_cmd_display').val('');
+    });
 
     // Picker commande volume ampli
     $('#bt_pick_amp_volume').on('click', function() {
