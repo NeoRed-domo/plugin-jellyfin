@@ -377,6 +377,8 @@ class jellyfin extends eqLogic {
             'Remaining_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 15, 'name' => __('Remaining (Scenario)', __FILE__)],
             'Media_Type' => ['type' => 'info', 'subtype' => 'string', 'order' => 16, 'name' => __('Media Type', __FILE__)],
             'Set_Position' => ['type' => 'action', 'subtype' => 'slider', 'order' => 99, 'name' => __('Set Position', __FILE__), 'isVisible' => 0],
+            'Audio_Profile' => ['type' => 'info', 'subtype' => 'string', 'order' => 17, 'name' => __('Profil audio', __FILE__), 'isVisible' => 0],
+            'Set_Audio_Profile' => ['type' => 'action', 'subtype' => 'select', 'order' => 18, 'name' => __('Changer profil audio', __FILE__), 'isVisible' => 0],
         ];
         foreach ($commands as $name => $options) {
             $logicalId = strtolower($name);
@@ -392,6 +394,19 @@ class jellyfin extends eqLogic {
                 if (isset($options['icon'])) $cmd->setDisplay('icon', $options['icon']);
                 if (isset($options['isVisible'])) $cmd->setIsVisible($options['isVisible']);
                 $cmd->save();
+            }
+        }
+        // Config du select profil audio + init valeur par défaut
+        $setProfile = $this->getCmd('action', 'set_audio_profile');
+        if (is_object($setProfile)) {
+            $profileInfo = $this->getCmd('info', 'audio_profile');
+            if (is_object($profileInfo)) {
+                $setProfile->setValue($profileInfo->getId());
+            }
+            $setProfile->setConfiguration('listValue', 'night|Nuit;cinema|Cinéma;thx|THX');
+            $setProfile->save();
+            if (is_object($profileInfo) && $profileInfo->execCmd() == '') {
+                $this->checkAndUpdateCmd('audio_profile', 'cinema');
             }
         }
     }
@@ -1787,6 +1802,16 @@ class jellyfinCmd extends cmd {
                 case 'stop':   return $eqLogic->stopSession();
                 case 'pause':  return $eqLogic->pauseSession();
                 case 'resume': return $eqLogic->resumeSession();
+            }
+            return;
+        }
+
+        // Commande profil audio
+        if ($logicalId == 'set_audio_profile') {
+            $value = isset($_options['select']) ? $_options['select'] : '';
+            if (in_array($value, ['night', 'cinema', 'thx'])) {
+                $eqLogic->checkAndUpdateCmd('audio_profile', $value);
+                log::add('jellyfin', 'info', 'Profil audio changé: ' . $value);
             }
             return;
         }
