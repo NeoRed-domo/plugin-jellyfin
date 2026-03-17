@@ -549,6 +549,138 @@ if (init('action') == 'add') {
         ajax::success($result);
     }
 
+    /* ************************* Actions Audio ************************* */
+
+    if (init('action') == 'check_ffmpeg') {
+        ajax::success(['available' => jellyfin::isFfmpegAvailable()]);
+    }
+
+    if (init('action') == 'save_calibration') {
+        $playerId = init('player_id');
+        $player = jellyfin::byId($playerId);
+        if (!is_object($player) || $player->getConfiguration('session_type') != '') {
+            throw new Exception(__('Lecteur introuvable', __FILE__));
+        }
+        $player->setConfiguration('audio_ref_volume', init('ref_volume'));
+        $player->setConfiguration('audio_ref_lufs', init('ref_lufs'));
+        $player->setConfiguration('audio_ref_media_id', init('ref_media_id'));
+        $player->save();
+        ajax::success();
+    }
+
+    if (init('action') == 'capture_amp_volume') {
+        $playerId = init('player_id');
+        $player = jellyfin::byId($playerId);
+        if (!is_object($player)) throw new Exception(__('Lecteur introuvable', __FILE__));
+        $infoCmdId = $player->getConfiguration('amp_volume_info_cmd_id');
+        if (empty($infoCmdId) || !is_numeric($infoCmdId)) {
+            throw new Exception(__('Commande info volume non configurée', __FILE__));
+        }
+        $cmd = cmd::byId($infoCmdId);
+        if (!is_object($cmd)) throw new Exception(__('Commande introuvable', __FILE__));
+        $volume = $cmd->execCmd();
+        ajax::success(['volume' => $volume]);
+    }
+
+    if (init('action') == 'analyze_lufs') {
+        $mediaId = init('mediaId');
+        $mode = init('mode', 'quick');
+        $force = init('force', 0);
+        if (empty($mediaId)) throw new Exception(__('ID média requis', __FILE__));
+        $result = jellyfin::analyzeLufs($mediaId, $force ? 'force' : $mode);
+        if (isset($result['error'])) throw new Exception($result['error']);
+        ajax::success($result);
+    }
+
+    if (init('action') == 'analyze_session_audio') {
+        $eqLogic = jellyfin::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getConfiguration('session_type') == '') {
+            throw new Exception(__('Séance introuvable', __FILE__));
+        }
+        $mode = init('mode', 'quick');
+        set_time_limit(0);
+        $sessionData = $eqLogic->getConfiguration('session_data');
+        $sessionType = $eqLogic->getConfiguration('session_type');
+        $playerId = $sessionData['player_id'] ?? null;
+        $playerEq = jellyfin::byId($playerId);
+        if (!is_object($playerEq)) throw new Exception(__('Lecteur introuvable', __FILE__));
+
+        // Collecter les triggers média
+        $mediaList = [];
+        if ($sessionType == 'cinema') {
+            foreach (jellyfin::SECTION_ORDER as $secKey) {
+                $sec = $sessionData['sections'][$secKey] ?? [];
+                if (isset($sec['enabled']) && $sec['enabled'] === false) continue;
+                foreach ($sec['triggers'] ?? [] as $idx => $trigger) {
+                    if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
+                        $mediaList[] = ['section' => $secKey, 'index' => $idx, 'media_id' => $trigger['media_id'], 'name' => $trigger['name'] ?? $trigger['media_id']];
+                    }
+                }
+            }
+        } else {
+            foreach ($sessionData['playlist'] ?? [] as $idx => $trigger) {
+                if ($trigger['type'] == 'media' && (!isset($trigger['enabled']) || $trigger['enabled'] !== false)) {
+                    $mediaList[] = ['section' => 'commercial', 'index' => $idx, 'media_id' => $trigger['media_id'], 'name' => $trigger['name'] ?? $trigger['media_id']];
+                }
+            }
+        }
+
+        $progressKey = 'jellyfin::audio_analysis::' . $eqLogic->getId();
+        cache::set($progressKey, json_encode([
+            'status' => 'analyzing', 'current_clip' => '', 'current_index' => 0,
+            'total_clips' => count($mediaList), 'results' => [], 'errors' => []
+        ]));
+
+        $results = [];
+        $errors = [];
+        foreach ($mediaList as $i => $item) {
+            cache::set($progressKey, json_encode([
+                'status' => 'analyzing', 'current_clip' => $item['name'],
+                'current_index' => $i + 1, 'total_clips' => count($mediaList),
+                'results' => $results, 'errors' => $errors
+            ]));
+
+            $startTime = microtime(true);
+            $lufsResult = jellyfin::analyzeLufs($item['media_id'], $mode);
+            $elapsed = microtime(true) - $startTime;
+            if ($elapsed < 1.0) usleep((int)((1.0 - $elapsed) * 1000000));
+
+            if (isset($lufsResult['error'])) {
+                $errors[] = ['media_id' => $item['media_id'], 'name' => $item['name'], 'error' => $lufsResult['error']];
+            } else {
+                $lufs = $lufsResult['lufs'];
+                $volumeAuto = jellyfin::calculateAutoVolume($playerEq, $lufs, $item['section']);
+                $results[] = ['media_id' => $item['media_id'], 'lufs' => $lufs, 'volume_auto' => $volumeAuto];
+
+                if ($sessionType == 'cinema') {
+                    $sessionData['sections'][$item['section']]['triggers'][$item['index']]['lufs'] = $lufs;
+                    $sessionData['sections'][$item['section']]['triggers'][$item['index']]['volume_auto'] = $volumeAuto;
+                } else {
+                    $sessionData['playlist'][$item['index']]['lufs'] = $lufs;
+                    $sessionData['playlist'][$item['index']]['volume_auto'] = $volumeAuto;
+                }
+            }
+        }
+
+        $sessionData['audio_calibrated'] = (count($results) > 0);
+        $eqLogic->setConfiguration('session_data', $sessionData);
+        $eqLogic->save();
+
+        cache::set($progressKey, json_encode([
+            'status' => 'done', 'current_clip' => '', 'current_index' => count($mediaList),
+            'total_clips' => count($mediaList), 'results' => $results, 'errors' => $errors
+        ]));
+
+        ajax::success(['analyzed' => count($results), 'errors' => count($errors)]);
+    }
+
+    if (init('action') == 'get_analysis_progress') {
+        $sessionId = init('id');
+        $progressKey = 'jellyfin::audio_analysis::' . $sessionId;
+        $progress = cache::byKey($progressKey)->getValue(null);
+        ajax::success($progress ? json_decode($progress, true) : ['status' => 'idle']);
+    }
+
     throw new Exception(__('Aucune methode correspondante à : ', __FILE__) . init('action'));
     /* * *************************Catch***************************** */
 } catch (Exception $e) {
