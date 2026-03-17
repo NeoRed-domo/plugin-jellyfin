@@ -1,6 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 
+# Force LF for shell scripts (bash requires LF, not CRLF)
+*.sh text eol=lf
+# Force LF for Python
+*.py text eol=lf
+
 # Exclure du package (git archive)
 .gitattributes export-ignore
 .gitignore export-ignore
