@@ -582,7 +582,7 @@ if (init('action') == 'add') {
 
         $fileSize = round(filesize($outputFile) / 1024);
         ajax::success([
-            'file' => 'plugins/jellyfin/data/reference_pink_noise_-24LUFS.wav',
+            'file' => 'plugins/jellyfin/core/php/download.php?file=reference_pink_noise_-24LUFS.wav',
             'lufs' => $lufs,
             'size' => $fileSize . ' Ko',
             'message' => __('Fichier généré. Importez-le dans votre bibliothèque Jellyfin.', __FILE__)
