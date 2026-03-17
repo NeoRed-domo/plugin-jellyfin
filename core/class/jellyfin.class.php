@@ -40,6 +40,11 @@ class jellyfin extends eqLogic {
     const TRIGGER_TYPES = ['media', 'pause', 'command', 'scenario'];
 
     /* ************************* Helpers ******************* */
+    public static function isFfmpegAvailable() {
+        exec('which ffmpeg 2>/dev/null', $output, $returnVar);
+        return ($returnVar == 0);
+    }
+
     public static function getBaseConfig() {
         $ip = config::byKey('jellyfin_ip', 'jellyfin');
         $port = config::byKey('jellyfin_port', 'jellyfin');

@@ -22,6 +22,10 @@ echo 30 > ${PROGRESS_FILE}
 echo "Installation de Python3 et Requests..."
 sudo apt-get install -y python3 python3-pip python3-requests
 
+echo 50 > ${PROGRESS_FILE}
+echo "Installation de ffmpeg..."
+sudo apt-get install -y ffmpeg
+
 echo 70 > ${PROGRESS_FILE}
 echo "Vérification de l'installation..."
 
