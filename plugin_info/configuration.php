@@ -203,4 +203,67 @@ if (!isConnect()) {
             </div>
         </div>
     </fieldset>
+
+    <fieldset>
+        <legend><i class="fas fa-volume-up"></i> {{Normalisation audio — Offsets par section (dB)}}</legend>
+        <div class="alert alert-info">
+            {{Offset en dB appliqué à chaque section par rapport au volume de référence. 0 = même volume que la référence. Négatif = plus bas.}}
+        </div>
+        <?php
+        $audioOffsets = [
+            'audio_offset_preparation'   => ['Préparation', -12],
+            'audio_offset_intro'         => ['Intro', -12],
+            'audio_offset_pubs'          => ['Publicités', -12],
+            'audio_offset_trailers'      => ['Bandes annonces', -8],
+            'audio_offset_short_film'    => ['Court métrage', -4],
+            'audio_offset_audio_trailer' => ['Trailer audio', 0],
+            'audio_offset_film'          => ['Film', 0]
+        ];
+        foreach ($audioOffsets as $key => $info) {
+            echo '<div class="form-group">';
+            echo '  <label class="col-sm-3 control-label">{{' . $info[0] . '}}</label>';
+            echo '  <div class="col-sm-2">';
+            echo '    <div class="input-group">';
+            echo '      <input class="configKey form-control" data-l1key="' . $key . '" placeholder="' . $info[1] . '" type="number" />';
+            echo '      <span class="input-group-addon">dB</span>';
+            echo '    </div>';
+            echo '  </div>';
+            echo '</div>';
+        }
+        ?>
+    </fieldset>
+
+    <fieldset>
+        <legend><i class="fas fa-headphones"></i> {{Profils audio (dB)}}</legend>
+        <div class="alert alert-info">
+            {{Offset global appliqué sur tous les volumes. Cinéma = référence (0dB). Pilotable par scénario Jeedom via la commande du lecteur.}}
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Nuit}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_profile_night" placeholder="-20" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Cinéma (référence)}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_profile_cinema" placeholder="0" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{THX}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_profile_thx" placeholder="10" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+        </div>
+    </fieldset>
 </form>
