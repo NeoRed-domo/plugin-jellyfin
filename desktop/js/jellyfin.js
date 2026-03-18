@@ -593,7 +593,12 @@ var SessionEditor = {
     },
 
     renderCinema: function() {
-        var html = '';
+        var html = '<style>';
+        html += '.session-active-section > .session-section-header { box-shadow: 0 0 12px rgba(29, 185, 84, 0.6), inset 0 0 4px rgba(29, 185, 84, 0.15); border-color: #1DB954 !important; }';
+        html += '.session-trigger-active { box-shadow: 0 0 8px rgba(29, 185, 84, 0.5); border: 1px solid rgba(29, 185, 84, 0.4) !important; border-radius: 4px; }';
+        html += '@keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 8px rgba(29, 185, 84, 0.4); } 50% { box-shadow: 0 0 16px rgba(29, 185, 84, 0.7); } }';
+        html += '.session-active-section > .session-section-header { animation: pulse-glow 2s ease-in-out infinite; }';
+        html += '</style>';
         var order = SessionEditor.sectionsMeta.order;
         var labels = SessionEditor.sectionsMeta.labels;
         var colors = SessionEditor.sectionsMeta.colors;
@@ -1233,16 +1238,27 @@ var SessionEditor = {
                             else loopLabel += '/1';
                             $('#monitor-loop').text(loopLabel);
                         }
-                        var debugParts = [];
-                        if (es.current_section) debugParts.push('sec:' + es.current_section);
-                        if (es.current_trigger_index !== undefined) debugParts.push('idx:' + es.current_trigger_index);
-                        if (es.current_media_id) debugParts.push('media:' + es.current_media_id.substring(0, 8) + '...');
-                        if (es.queued) debugParts.push('queued');
-                        if (es.stopped_since) debugParts.push('stopped_since:' + es.stopped_since);
+                        // Halo sur la section et le clip en cours
+                        $('.session-section').removeClass('session-active-section');
+                        $('.session-trigger-active').removeClass('session-trigger-active');
+                        var activeSection = es.current_section || '';
+                        var activeIndex = es.current_trigger_index;
+                        if (activeSection) {
+                            var $sec = $('.session-section[data-section="' + activeSection + '"]');
+                            $sec.addClass('session-active-section');
+                            // Halo sur le trigger en cours (Nième div enfant dans le body)
+                            var $body = $sec.find('.session-section-body');
+                            if ($body.is(':visible') && activeIndex !== undefined) {
+                                $body.find('div[style*="background"]').eq(activeIndex).addClass('session-trigger-active');
+                            }
+                        }
                     }
                 } else {
                     $monitor.hide();
                     $('#session-stop-btn').hide();
+                    // Retirer les halos quand la séance est arrêtée
+                    $('.session-section').removeClass('session-active-section');
+                    $('.session-trigger-active').removeClass('session-trigger-active');
                 }
             }
         });
