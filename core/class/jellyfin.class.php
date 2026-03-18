@@ -1605,7 +1605,8 @@ public function remoteControl($commandName, $_options = null) {
         $refVolume = (float)$playerEq->getConfiguration('audio_ref_volume', 0);
         $refLufs = (float)$playerEq->getConfiguration('audio_ref_lufs', -23);
         $sectionOffset = (float)config::byKey('audio_offset_' . $sectionKey, 'jellyfin', 0);
-        $volume = $refVolume + ($refLufs - $clipLufs) + $sectionOffset;
+        $compensation = (float)config::byKey('audio_calibration_compensation', 'jellyfin', 4);
+        $volume = $refVolume + $compensation + ($refLufs - $clipLufs) + $sectionOffset;
         return (int)max(0, min(100, $volume));
     }
 

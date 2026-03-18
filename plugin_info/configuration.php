@@ -234,6 +234,18 @@ if (!isConnect()) {
     </fieldset>
 
     <fieldset>
+        <legend><i class="fas fa-sliders-h"></i> {{Compensation calibration}}</legend>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Compensation bruit rose → contenu (dB)}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_calibration_compensation" placeholder="4" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+            <span class="col-sm-4 help-block">{{Le bruit rose sonne plus fort que du contenu réel au même LUFS. Ce paramètre compense la différence. Défaut : +4 dB.}}</span>
+        </div>
+
         <legend><i class="fas fa-headphones"></i> {{Profils audio (dB)}}</legend>
         <div class="alert alert-info">
             {{Offset global appliqué sur tous les volumes. Cinéma = référence (0dB). Pilotable par scénario Jeedom via la commande du lecteur.}}
