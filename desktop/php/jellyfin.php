@@ -158,6 +158,16 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
 
                         <div class="form-group device-only">
+                            <label class="col-sm-3 control-label"><?php echo __('Type de sortie audio', __FILE__); ?></label>
+                            <div class="col-sm-3">
+                                <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="audio_output_type">
+                                    <option value="passthrough"><?php echo __('Ampli (passthrough)', __FILE__); ?></option>
+                                    <option value="pcm"><?php echo __('TV / PCM', __FILE__); ?></option>
+                                </select>
+                                <span class="help-block"><?php echo __('Passthrough = mesure LUFS sans DRC (ampli décode). TV/PCM = mesure avec DRC (client décode).', __FILE__); ?></span>
+                            </div>
+                        </div>
+                        <div class="form-group device-only">
                             <label class="col-sm-3 control-label"><?php echo __('Commande info volume ampli', __FILE__); ?></label>
                             <div class="col-sm-4">
                                 <input type="hidden" class="eqLogicAttr" data-l1key="configuration" data-l2key="amp_volume_info_cmd_id" id="amp_volume_info_cmd_id" />

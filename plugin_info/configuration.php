@@ -278,4 +278,48 @@ if (!isConnect()) {
             </div>
         </div>
     </fieldset>
+
+    <fieldset>
+        <legend><i class="fas fa-bullhorn"></i> {{Profils audio — Diffusion commerciale (dB)}}</legend>
+        <div class="alert alert-info">
+            {{Offset pour les diffusions commerciales. Normal = référence (0dB).}}
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Muet}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_commercial_mute" placeholder="0" type="number" />
+                    <span class="input-group-addon">vol</span>
+                </div>
+            </div>
+            <span class="col-sm-4 help-block">{{Volume fixe (0 = muet). Ignore la normalisation.}}</span>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Discret}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_commercial_quiet" placeholder="-20" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Normal (référence)}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_commercial_normal" placeholder="0" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label">{{Fort}}</label>
+            <div class="col-sm-2">
+                <div class="input-group">
+                    <input class="configKey form-control" data-l1key="audio_commercial_loud" placeholder="5" type="number" />
+                    <span class="input-group-addon">dB</span>
+                </div>
+            </div>
+        </div>
+    </fieldset>
 </form>

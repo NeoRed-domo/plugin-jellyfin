@@ -377,8 +377,10 @@ class jellyfin extends eqLogic {
             'Remaining_Num' => ['type' => 'info', 'subtype' => 'string', 'order' => 15, 'name' => __('Remaining (Scenario)', __FILE__)],
             'Media_Type' => ['type' => 'info', 'subtype' => 'string', 'order' => 16, 'name' => __('Media Type', __FILE__)],
             'Set_Position' => ['type' => 'action', 'subtype' => 'slider', 'order' => 99, 'name' => __('Set Position', __FILE__), 'isVisible' => 0],
-            'Audio_Profile' => ['type' => 'info', 'subtype' => 'string', 'order' => 17, 'name' => __('Profil audio', __FILE__), 'isVisible' => 0],
-            'Set_Audio_Profile' => ['type' => 'action', 'subtype' => 'select', 'order' => 18, 'name' => __('Changer profil audio', __FILE__), 'isVisible' => 0],
+            'Audio_Profile' => ['type' => 'info', 'subtype' => 'string', 'order' => 17, 'name' => __('Profil audio cinéma', __FILE__), 'isVisible' => 0],
+            'Set_Audio_Profile' => ['type' => 'action', 'subtype' => 'select', 'order' => 18, 'name' => __('Changer profil cinéma', __FILE__), 'isVisible' => 0],
+            'Commercial_Audio_Profile' => ['type' => 'info', 'subtype' => 'string', 'order' => 19, 'name' => __('Profil audio commercial', __FILE__), 'isVisible' => 0],
+            'Set_Commercial_Audio_Profile' => ['type' => 'action', 'subtype' => 'select', 'order' => 20, 'name' => __('Changer profil commercial', __FILE__), 'isVisible' => 0],
         ];
         foreach ($commands as $name => $options) {
             $logicalId = strtolower($name);
@@ -407,6 +409,19 @@ class jellyfin extends eqLogic {
             $setProfile->save();
             if (is_object($profileInfo) && $profileInfo->execCmd() == '') {
                 $this->checkAndUpdateCmd('audio_profile', 'cinema');
+            }
+        }
+        // Config du select profil commercial
+        $setCommProfile = $this->getCmd('action', 'set_commercial_audio_profile');
+        if (is_object($setCommProfile)) {
+            $commProfileInfo = $this->getCmd('info', 'commercial_audio_profile');
+            if (is_object($commProfileInfo)) {
+                $setCommProfile->setValue($commProfileInfo->getId());
+            }
+            $setCommProfile->setConfiguration('listValue', 'mute|Muet;quiet|Discret;normal|Normal;loud|Fort');
+            $setCommProfile->save();
+            if (is_object($commProfileInfo) && $commProfileInfo->execCmd() == '') {
+                $this->checkAndUpdateCmd('commercial_audio_profile', 'normal');
             }
         }
     }
@@ -1498,10 +1513,25 @@ public function remoteControl($commandName, $_options = null) {
         // 2. Volume auto (LUFS normalisé, sans offset section ni profil) + offsets en live
         elseif (isset($trigger['volume_auto']) && $trigger['volume_auto'] !== '' && $trigger['volume_auto'] !== null) {
             $sectionOffset = (float)config::byKey('audio_offset_' . $sectionKey, 'jellyfin', 0);
-            $profileCmd = $playerEq->getCmd('info', 'audio_profile');
-            $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'cinema';
-            $profileOffset = (float)config::byKey('audio_profile_' . $profile, 'jellyfin', 0);
-            $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
+
+            // Profil : cinéma ou commercial selon le type de section
+            if ($sectionKey == 'commercial') {
+                $profileCmd = $playerEq->getCmd('info', 'commercial_audio_profile');
+                $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'normal';
+                // Muet = volume fixe 0, ignore tout
+                if ($profile == 'mute') {
+                    $muteVol = (int)config::byKey('audio_commercial_mute', 'jellyfin', 0);
+                    $volume = $muteVol;
+                } else {
+                    $profileOffset = (float)config::byKey('audio_commercial_' . $profile, 'jellyfin', 0);
+                    $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
+                }
+            } else {
+                $profileCmd = $playerEq->getCmd('info', 'audio_profile');
+                $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'cinema';
+                $profileOffset = (float)config::byKey('audio_profile_' . $profile, 'jellyfin', 0);
+                $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
+            }
         }
         // 3. Volume par défaut
         else {
@@ -1524,7 +1554,7 @@ public function remoteControl($commandName, $_options = null) {
         }
     }
 
-    public static function analyzeLufs($mediaId, $mode = 'quick') {
+    public static function analyzeLufs($mediaId, $mode = 'quick', $audioOutputType = 'passthrough') {
         if (!self::isFfmpegAvailable()) {
             return ['error' => 'ffmpeg non installé'];
         }
@@ -1580,9 +1610,10 @@ public function remoteControl($commandName, $_options = null) {
         }
         log::add('jellyfin', 'debug', 'LUFS download OK: ' . round($dlSize / 1024 / 1024, 1) . ' Mo');
 
-        // -drc_scale 0 : désactive la compression dynamique AC3 (le décodeur ffmpeg l'applique par défaut,
-        // mais l'ampli en passthrough ne l'applique pas → fausse les mesures de 0 à 13dB)
-        $cmd = 'ffmpeg -drc_scale 0 -i ' . escapeshellarg($tmpFile) . ' -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
+        // Passthrough (ampli) : -drc_scale 0 désactive le DRC ffmpeg (l'ampli ne l'applique pas)
+        // PCM (TV) : DRC par défaut (le client/TV l'applique lors du décodage)
+        $drcOpt = ($audioOutputType == 'passthrough') ? '-drc_scale 0' : '';
+        $cmd = 'ffmpeg ' . $drcOpt . ' -i ' . escapeshellarg($tmpFile) . ' -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
         $output = [];
         exec($cmd, $output, $returnVar);
         @unlink($tmpFile);
@@ -1906,12 +1937,20 @@ class jellyfinCmd extends cmd {
             return;
         }
 
-        // Commande profil audio
+        // Commandes profil audio
         if ($logicalId == 'set_audio_profile') {
             $value = isset($_options['select']) ? $_options['select'] : '';
             if (in_array($value, ['night', 'cinema', 'thx'])) {
                 $eqLogic->checkAndUpdateCmd('audio_profile', $value);
-                log::add('jellyfin', 'info', 'Profil audio changé: ' . $value);
+                log::add('jellyfin', 'info', 'Profil audio cinéma: ' . $value);
+            }
+            return;
+        }
+        if ($logicalId == 'set_commercial_audio_profile') {
+            $value = isset($_options['select']) ? $_options['select'] : '';
+            if (in_array($value, ['mute', 'quiet', 'normal', 'loud'])) {
+                $eqLogic->checkAndUpdateCmd('commercial_audio_profile', $value);
+                log::add('jellyfin', 'info', 'Profil audio commercial: ' . $value);
             }
             return;
         }

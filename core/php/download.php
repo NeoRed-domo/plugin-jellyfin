@@ -7,21 +7,22 @@ if (empty($file)) {
     die('File parameter missing');
 }
 
-// Sécurité : fichiers dans data/ ou resources/audio/ du plugin
-$dataDir = realpath(__DIR__ . '/../../data');
-$audioDir = realpath(__DIR__ . '/../../resources/audio');
+// Sécurité : fichiers dans data/ ou resources/audio/ du plugin uniquement
+$allowedDirs = [
+    __DIR__ . '/../../data',
+    __DIR__ . '/../../resources/audio'
+];
 $filePath = null;
-$candidate = realpath($dataDir . '/' . basename($file));
-if ($candidate && strpos($candidate, $dataDir) === 0) {
-    $filePath = $candidate;
-} else {
-    $candidate = realpath($audioDir . '/' . basename($file));
-    if ($candidate && strpos($candidate, $audioDir) === 0) {
-        $filePath = $candidate;
+$safeFile = basename($file); // Empêche les traversées de répertoire
+foreach ($allowedDirs as $dir) {
+    $resolved = realpath($dir . '/' . $safeFile);
+    if ($resolved && file_exists($resolved)) {
+        $filePath = $resolved;
+        break;
     }
 }
 
-if (!$filePath || strpos($filePath, $dataDir) !== 0 || !file_exists($filePath)) {
+if (!$filePath || !file_exists($filePath)) {
     header("HTTP/1.0 404 Not Found");
     die('File not found');
 }

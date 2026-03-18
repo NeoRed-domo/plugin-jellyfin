@@ -759,7 +759,20 @@ var SessionEditor = {
         var playlist = SessionEditor.sessionData.playlist || [];
         var dur = SessionEditor.calculateDuration(playlist);
 
-        var html = '<div class="session-section" data-section="playlist">';
+        // Barre d'outils en haut
+        var html = '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#1a1a1a; border:1px solid #333; border-radius:4px; margin-bottom:12px;">';
+        html += '  <div style="display:flex; align-items:center; gap:10px;">';
+        html += '    <span style="color:#888; font-size:11px; text-transform:uppercase;"><i class="fas fa-bullhorn"></i> ' + _t('Profil') + '</span>';
+        html += '    <select id="session-commercial-profile" style="width:auto; font-size:12px; padding:3px 8px; height:28px; background:#333; color:#fff; border:1px solid #555; border-radius:3px;" onchange="SessionEditor.setCommercialProfile(this.value)">';
+        html += '      <option value="mute">' + _t('Muet') + '</option>';
+        html += '      <option value="quiet">' + _t('Discret') + '</option>';
+        html += '      <option value="normal">' + _t('Normal') + '</option>';
+        html += '      <option value="loud">' + _t('Fort') + '</option>';
+        html += '    </select>';
+        html += '  </div>';
+        html += '</div>';
+
+        html += '<div class="session-section" data-section="playlist">';
         html += '  <div style="background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px 4px 0 0; display:flex; align-items:center; gap:10px;">';
         html += '    <span style="color:#1DB954; font-size:16px;">●</span>';
         html += '    <span style="color:#1DB954; font-weight:bold; flex-grow:1;">' + _t('Playlist') + '</span>';
@@ -804,6 +817,29 @@ var SessionEditor = {
 
         // Démarrer le polling monitoring
         SessionEditor.startMonitoring();
+
+        // Charger le profil commercial actuel
+        if (SessionEditor.sessionData && SessionEditor.sessionData.player_id) {
+            $.ajax({
+                type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                data: { action: 'get_player_cmd_ids', player_id: SessionEditor.sessionData.player_id },
+                dataType: 'json', global: false,
+                success: function(data) {
+                    if (data.state == 'ok' && data.result.commercial_audio_profile) {
+                        $.ajax({
+                            type: 'POST', url: 'core/ajax/cmd.ajax.php',
+                            data: { action: 'execCmd', id: data.result.commercial_audio_profile },
+                            dataType: 'json', global: false,
+                            success: function(cmdData) {
+                                if (cmdData.state == 'ok' && cmdData.result) {
+                                    $('#session-commercial-profile').val(cmdData.result);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        }
     },
 
     renderTriggerList: function(triggers, sectionKey) {
@@ -1039,6 +1075,27 @@ var SessionEditor = {
             triggers.splice(index, 1);
             SessionEditor.setTriggers(sectionKey, triggers);
             SessionEditor.save(function() { SessionEditor.reload(); });
+        });
+    },
+
+    setCommercialProfile: function(profile) {
+        if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) return;
+        $.ajax({
+            type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'get_player_cmd_ids', player_id: SessionEditor.sessionData.player_id },
+            dataType: 'json', global: false,
+            success: function(data) {
+                if (data.state == 'ok' && data.result.set_commercial_audio_profile) {
+                    $.ajax({
+                        type: 'POST', url: 'core/ajax/cmd.ajax.php',
+                        data: { action: 'execCmd', id: data.result.set_commercial_audio_profile, value: JSON.stringify({select: profile}) },
+                        dataType: 'json', global: false,
+                        success: function() {
+                            $('#div_alert').showAlert({ message: _t('Profil commercial') + ' : ' + profile, level: 'success' });
+                        }
+                    });
+                }
+            }
         });
     },
 

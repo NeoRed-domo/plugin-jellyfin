@@ -625,7 +625,8 @@ if (init('action') == 'add') {
         $mode = init('mode', 'quick');
         $force = init('force', 0);
         if (empty($mediaId)) throw new Exception(__('ID média requis', __FILE__));
-        $result = jellyfin::analyzeLufs($mediaId, $force ? 'force' : $mode);
+        $audioOutputType = init('audio_output_type', 'passthrough');
+        $result = jellyfin::analyzeLufs($mediaId, $force ? 'force' : $mode, $audioOutputType);
         if (isset($result['error'])) throw new Exception($result['error']);
         ajax::success($result);
     }
@@ -681,7 +682,8 @@ if (init('action') == 'add') {
             $startTime = microtime(true);
             // Toujours bypasser le cache lors d'une normalisation (analyse fraîche)
             cache::set('jellyfin::lufs::' . $item['media_id'], null);
-            $lufsResult = jellyfin::analyzeLufs($item['media_id'], $mode);
+            $audioOutputType = $playerEq->getConfiguration('audio_output_type', 'passthrough');
+            $lufsResult = jellyfin::analyzeLufs($item['media_id'], $mode, $audioOutputType);
             $elapsed = microtime(true) - $startTime;
             if ($elapsed < 1.0) usleep((int)((1.0 - $elapsed) * 1000000));
 
