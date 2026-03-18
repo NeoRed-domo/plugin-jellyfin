@@ -787,8 +787,26 @@ var SessionEditor = {
         html += '  </div>';
         html += '</div>';
 
-        html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
-        html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale') + ' : <strong style="color:#fff;" id="session-total-duration">' + dur + '</strong> · <i class="fas fa-redo"></i> ' + _t('Boucle infinie') + '</span>';
+        // Sélecteur de boucle
+        var loopVal = SessionEditor.sessionData.loop;
+        var loopMode = 'infinite';
+        var loopCount = 1;
+        if (loopVal === false) loopMode = 'none';
+        else if (loopVal === true || loopVal === 'infinite') loopMode = 'infinite';
+        else if (typeof loopVal === 'number' && loopVal > 0) { loopMode = 'count'; loopCount = loopVal; }
+
+        html += '<div style="margin-top:8px; padding:8px 12px; background:#1a1a1a; border:1px solid #333; border-radius:4px; display:flex; align-items:center; gap:10px;">';
+        html += '  <span style="color:#888; font-size:11px; text-transform:uppercase;"><i class="fas fa-redo"></i> ' + _t('Boucle') + '</span>';
+        html += '  <select id="session-loop-mode" style="width:auto; font-size:12px; padding:3px 8px; height:28px; background:#333; color:#fff; border:1px solid #555; border-radius:3px;" onchange="SessionEditor.setLoopMode(this.value)">';
+        html += '    <option value="none"' + (loopMode == 'none' ? ' selected' : '') + '>' + _t('Pas de boucle') + '</option>';
+        html += '    <option value="infinite"' + (loopMode == 'infinite' ? ' selected' : '') + '>' + _t('Boucle infinie') + '</option>';
+        html += '    <option value="count"' + (loopMode == 'count' ? ' selected' : '') + '>' + _t('Nombre de boucles') + '</option>';
+        html += '  </select>';
+        html += '  <input type="number" id="session-loop-count" min="1" max="999" value="' + loopCount + '" style="width:60px; font-size:12px; padding:3px; height:28px; background:#333; color:#fff; border:1px solid #555; border-radius:3px;' + (loopMode != 'count' ? ' display:none;' : '') + '" onchange="SessionEditor.setLoopCount(this.value)" />';
+        html += '</div>';
+
+        html += '<div style="margin-top:8px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
+        html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale') + ' : <strong style="color:#fff;" id="session-total-duration">' + dur + '</strong></span>';
         html += '  <div style="display:flex; gap:6px;">';
         html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
         html += '    <button class="btn btn-sm btn-danger" onclick="SessionEditor.stopSession()" style="display:none;" id="session-stop-btn"><i class="fas fa-stop"></i> ' + _t('Arrêter') + '</button>';
@@ -1076,6 +1094,25 @@ var SessionEditor = {
             SessionEditor.setTriggers(sectionKey, triggers);
             SessionEditor.save(function() { SessionEditor.reload(); });
         });
+    },
+
+    setLoopMode: function(mode) {
+        if (!SessionEditor.sessionData) return;
+        if (mode == 'none') SessionEditor.sessionData.loop = false;
+        else if (mode == 'infinite') SessionEditor.sessionData.loop = true;
+        else if (mode == 'count') {
+            var count = parseInt($('#session-loop-count').val()) || 1;
+            SessionEditor.sessionData.loop = count;
+            $('#session-loop-count').show();
+        }
+        if (mode != 'count') $('#session-loop-count').hide();
+        SessionEditor.save();
+    },
+
+    setLoopCount: function(count) {
+        if (!SessionEditor.sessionData) return;
+        SessionEditor.sessionData.loop = parseInt(count) || 1;
+        SessionEditor.save();
     },
 
     setCommercialProfile: function(profile) {

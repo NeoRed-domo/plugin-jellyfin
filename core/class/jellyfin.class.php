@@ -1270,14 +1270,29 @@ public function remoteControl($commandName, $_options = null) {
                 }
             }
             // Boucle : retourner au début
-            if (!$next && $loop && count($playlist) > 0) {
+            // loop = false (pas de boucle), true (infini), ou nombre (N boucles restantes)
+            $shouldLoop = false;
+            if ($loop === true) {
+                $shouldLoop = true;
+            } elseif (is_numeric($loop) && (int)$loop > 0) {
+                // Décrémenter le compteur de boucles
+                $loopsRemaining = $engineState['loops_remaining'] ?? (int)$loop;
+                if ($loopsRemaining > 1) {
+                    $engineState['loops_remaining'] = $loopsRemaining - 1;
+                    $shouldLoop = true;
+                    log::add('jellyfin', 'info', 'Commercial: boucle ' . ((int)$loop - $loopsRemaining + 1) . '/' . (int)$loop);
+                }
+                // Si loopsRemaining <= 1, c'est la dernière boucle, on ne reboucle plus
+            }
+
+            if (!$next && $shouldLoop && count($playlist) > 0) {
                 for ($i = 0; $i < count($playlist); $i++) {
                     if ($playlist[$i]['type'] == 'media' && (!isset($playlist[$i]['enabled']) || $playlist[$i]['enabled'] !== false)) {
                         $next = ['trigger' => $playlist[$i], 'section' => 'playlist', 'index' => $i];
                         break;
                     }
                 }
-                if ($next) log::add('jellyfin', 'info', 'Commercial: boucle, retour au début');
+                if ($next) log::add('jellyfin', 'info', 'Commercial: retour au début de la playlist');
             }
         } else {
             $sections = $sessionData['sections'] ?? [];
@@ -1445,7 +1460,8 @@ public function remoteControl($commandName, $_options = null) {
             $remainingSeconds = ($runTimeTicks - $positionTicks) / 10000000;
             $isLast = ($triggerIndex + 1 >= count($playlist));
 
-            if (!($isLast && !$loop) && $remainingSeconds <= $nextAnticipation && $remainingSeconds > 0) {
+            $canLoop = ($loop === true || (is_numeric($loop) && (int)$loop > 0));
+            if (!($isLast && !$canLoop) && $remainingSeconds <= $nextAnticipation && $remainingSeconds > 0) {
                 $nextIndex = $isLast ? 0 : $triggerIndex + 1;
                 $nextMedia = $playlist[$nextIndex];
                 self::sendNextTrackDirect($jellyfinSessionId, $config);
