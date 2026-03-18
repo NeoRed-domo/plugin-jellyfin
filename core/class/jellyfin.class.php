@@ -1579,7 +1579,9 @@ public function remoteControl($commandName, $_options = null) {
         }
         log::add('jellyfin', 'debug', 'LUFS download OK: ' . round($dlSize / 1024 / 1024, 1) . ' Mo');
 
-        $cmd = 'ffmpeg -i ' . escapeshellarg($tmpFile) . ' -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
+        // -drc_scale 0 : désactive la compression dynamique AC3 (le décodeur ffmpeg l'applique par défaut,
+        // mais l'ampli en passthrough ne l'applique pas → fausse les mesures de 0 à 13dB)
+        $cmd = 'ffmpeg -drc_scale 0 -i ' . escapeshellarg($tmpFile) . ' -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
         $output = [];
         exec($cmd, $output, $returnVar);
         @unlink($tmpFile);
