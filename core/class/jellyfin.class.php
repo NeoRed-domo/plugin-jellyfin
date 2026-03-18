@@ -1558,7 +1558,8 @@ public function remoteControl($commandName, $_options = null) {
         }
 
         // Commande ffmpeg
-        $cmd = 'curl -s "' . $streamUrl . '" | ffmpeg -i pipe:0 -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
+        // -vn : ignore vidéo, -ac 2 : downmix en stéréo (compare DD5.1/AAC2.0/DD2.0 sur la même base)
+        $cmd = 'curl -s "' . $streamUrl . '" | ffmpeg -i pipe:0 -vn -ac 2 ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
         $output = [];
         exec($cmd, $output, $returnVar);
         $fullOutput = implode("\n", $output);
