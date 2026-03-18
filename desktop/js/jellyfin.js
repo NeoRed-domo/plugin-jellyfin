@@ -598,24 +598,24 @@ var SessionEditor = {
         var labels = SessionEditor.sectionsMeta.labels;
         var colors = SessionEditor.sectionsMeta.colors;
 
-        // Couleurs pastelles pour les fonds de section (version très atténuée de la couleur principale)
+        // Couleurs bien séparées sur la roue chromatique (~51° d'écart)
         var pastelBg = {
-            'preparation':   'rgba(243,156,18,0.08)',
-            'intro':         'rgba(155,89,182,0.08)',
-            'pubs':          'rgba(231,76,60,0.08)',
-            'trailers':      'rgba(230,126,34,0.08)',
-            'short_film':    'rgba(46,204,113,0.08)',
-            'audio_trailer': 'rgba(52,152,219,0.08)',
-            'film':          'rgba(29,185,84,0.08)'
+            'preparation':   'rgba(255,170,50,0.10)',   // orange chaud (30°)
+            'intro':         'rgba(180,70,220,0.10)',    // violet (280°)
+            'pubs':          'rgba(220,50,50,0.10)',     // rouge (0°)
+            'trailers':      'rgba(50,180,220,0.10)',    // cyan (190°)
+            'short_film':    'rgba(220,200,50,0.10)',    // jaune (50°)
+            'audio_trailer': 'rgba(50,120,220,0.10)',    // bleu (220°)
+            'film':          'rgba(50,200,100,0.10)'     // vert (140°)
         };
         var pastelBorder = {
-            'preparation':   'rgba(243,156,18,0.25)',
-            'intro':         'rgba(155,89,182,0.25)',
-            'pubs':          'rgba(231,76,60,0.25)',
-            'trailers':      'rgba(230,126,34,0.25)',
-            'short_film':    'rgba(46,204,113,0.25)',
-            'audio_trailer': 'rgba(52,152,219,0.25)',
-            'film':          'rgba(29,185,84,0.25)'
+            'preparation':   'rgba(255,170,50,0.35)',
+            'intro':         'rgba(180,70,220,0.35)',
+            'pubs':          'rgba(220,50,50,0.35)',
+            'trailers':      'rgba(50,180,220,0.35)',
+            'short_film':    'rgba(220,200,50,0.35)',
+            'audio_trailer': 'rgba(50,120,220,0.35)',
+            'film':          'rgba(50,200,100,0.35)'
         };
 
         // === BARRE D'OUTILS EN HAUT ===
@@ -1372,9 +1372,15 @@ var SessionEditor = {
                         clearInterval(SessionEditor._analysisPoll);
                         var total = (p.results || []).length;
                         var errs = (p.errors || []).length;
+                        // Afficher TOUS les résultats (y compris le dernier)
+                        var logHtml = '';
+                        (p.results || []).forEach(function(r) { logHtml += '<div style="color:#1DB954;">\u2713 LUFS: ' + r.lufs.toFixed(1) + ' \u2192 vol: ' + r.volume_auto + '</div>'; });
+                        (p.errors || []).forEach(function(e) { logHtml += '<div style="color:#e74c3c;">\u2717 ' + e.name + ': ' + e.error + '</div>'; });
+                        $('#analysis-log').html(logHtml);
                         $('#analysis-bar').css('width', '100%');
+                        // Remplacer le spinner par un check
+                        $('#audio-analysis-progress > div:first-child').html('<i class="fas fa-check-circle fa-2x" style="color:#1DB954;"></i>');
                         $('#analysis-status').html('<i class="fas fa-check" style="color:#1DB954;"></i> ' + total + ' clip(s) ' + _t('normalisé(s)') + (errs > 0 ? ' (' + errs + ' ' + _t('erreur(s)') + ')' : ''));
-                        // Ajouter bouton fermer (ne se ferme plus automatiquement)
                         $('#audio-analysis-progress').append('<div style="text-align:center; margin-top:15px;"><button class="btn btn-sm btn-success" onclick="bootbox.hideAll(); SessionEditor.reload();"><i class="fas fa-check"></i> ' + _t('Fermer') + '</button></div>');
                     }
                 }

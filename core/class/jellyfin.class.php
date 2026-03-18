@@ -17,13 +17,13 @@ class jellyfin extends eqLogic {
     ];
 
     const SECTION_COLORS = [
-        'preparation'   => '#f39c12',
-        'intro'         => '#9b59b6',
-        'pubs'          => '#e74c3c',
-        'trailers'      => '#e67e22',
-        'short_film'    => '#2ecc71',
-        'audio_trailer' => '#3498db',
-        'film'          => '#1DB954'
+        'preparation'   => '#ffaa32',
+        'intro'         => '#b446dc',
+        'pubs'          => '#dc3232',
+        'trailers'      => '#32b4dc',
+        'short_film'    => '#dcc832',
+        'audio_trailer' => '#3278dc',
+        'film'          => '#32c864'
     ];
 
     const MARK_ORDER = ['pre_generique', 'generique_1', 'post_film_1', 'generique_2', 'post_film_2', 'fin'];
