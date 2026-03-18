@@ -679,6 +679,8 @@ if (init('action') == 'add') {
             ]));
 
             $startTime = microtime(true);
+            // Toujours bypasser le cache lors d'une normalisation (analyse fraîche)
+            cache::set('jellyfin::lufs::' . $item['media_id'], null);
             $lufsResult = jellyfin::analyzeLufs($item['media_id'], $mode);
             $elapsed = microtime(true) - $startTime;
             if ($elapsed < 1.0) usleep((int)((1.0 - $elapsed) * 1000000));
