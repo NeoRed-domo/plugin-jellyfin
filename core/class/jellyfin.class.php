@@ -1515,21 +1515,29 @@ public function remoteControl($commandName, $_options = null) {
             $sectionOffset = (float)config::byKey('audio_offset_' . $sectionKey, 'jellyfin', 0);
 
             // Profil : cinéma ou commercial selon le type de section
+            // Les défauts sont codés ici car config::byKey retourne '' si non configuré
+            $commercialDefaults = ['mute' => 0, 'quiet' => -20, 'normal' => 0, 'loud' => 5];
+            $cinemaDefaults = ['night' => -20, 'cinema' => 0, 'thx' => 10];
+
             if ($sectionKey == 'commercial') {
                 $profileCmd = $playerEq->getCmd('info', 'commercial_audio_profile');
                 $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'normal';
-                // Muet = volume fixe 0, ignore tout
+                if (empty($profile)) $profile = 'normal';
+                // Muet = volume fixe
                 if ($profile == 'mute') {
-                    $muteVol = (int)config::byKey('audio_commercial_mute', 'jellyfin', 0);
-                    $volume = $muteVol;
+                    $muteVol = config::byKey('audio_commercial_mute', 'jellyfin', '');
+                    $volume = ($muteVol !== '') ? (int)$muteVol : $commercialDefaults['mute'];
                 } else {
-                    $profileOffset = (float)config::byKey('audio_commercial_' . $profile, 'jellyfin', 0);
+                    $cfgVal = config::byKey('audio_commercial_' . $profile, 'jellyfin', '');
+                    $profileOffset = ($cfgVal !== '') ? (float)$cfgVal : ($commercialDefaults[$profile] ?? 0);
                     $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
                 }
             } else {
                 $profileCmd = $playerEq->getCmd('info', 'audio_profile');
                 $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'cinema';
-                $profileOffset = (float)config::byKey('audio_profile_' . $profile, 'jellyfin', 0);
+                if (empty($profile)) $profile = 'cinema';
+                $cfgVal = config::byKey('audio_profile_' . $profile, 'jellyfin', '');
+                $profileOffset = ($cfgVal !== '') ? (float)$cfgVal : ($cinemaDefaults[$profile] ?? 0);
                 $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
             }
         }
