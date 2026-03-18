@@ -598,6 +598,40 @@ var SessionEditor = {
         var labels = SessionEditor.sectionsMeta.labels;
         var colors = SessionEditor.sectionsMeta.colors;
 
+        // Couleurs pastelles pour les fonds de section (version très atténuée de la couleur principale)
+        var pastelBg = {
+            'preparation':   'rgba(243,156,18,0.08)',
+            'intro':         'rgba(155,89,182,0.08)',
+            'pubs':          'rgba(231,76,60,0.08)',
+            'trailers':      'rgba(230,126,34,0.08)',
+            'short_film':    'rgba(46,204,113,0.08)',
+            'audio_trailer': 'rgba(52,152,219,0.08)',
+            'film':          'rgba(29,185,84,0.08)'
+        };
+        var pastelBorder = {
+            'preparation':   'rgba(243,156,18,0.25)',
+            'intro':         'rgba(155,89,182,0.25)',
+            'pubs':          'rgba(231,76,60,0.25)',
+            'trailers':      'rgba(230,126,34,0.25)',
+            'short_film':    'rgba(46,204,113,0.25)',
+            'audio_trailer': 'rgba(52,152,219,0.25)',
+            'film':          'rgba(29,185,84,0.25)'
+        };
+
+        // === BARRE D'OUTILS EN HAUT ===
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#1a1a1a; border:1px solid #333; border-radius:4px; margin-bottom:12px;">';
+        html += '  <div style="display:flex; align-items:center; gap:10px;">';
+        html += '    <span style="color:#888; font-size:11px; text-transform:uppercase;"><i class="fas fa-headphones"></i> ' + _t('Profil') + '</span>';
+        html += '    <select id="session-audio-profile" style="width:auto; font-size:12px; padding:3px 8px; height:28px; background:#333; color:#fff; border:1px solid #555; border-radius:3px;" onchange="SessionEditor.setAudioProfile(this.value)">';
+        html += '      <option value="cinema">' + _t('Cinéma') + '</option>';
+        html += '      <option value="night">' + _t('Nuit') + '</option>';
+        html += '      <option value="thx">THX</option>';
+        html += '    </select>';
+        html += '  </div>';
+        html += '  <button class="btn btn-xs btn-default" onclick="SessionEditor.collapseAll()"><i class="fas fa-compress-alt"></i> ' + _t('Tout replier') + '</button>';
+        html += '</div>';
+
+        // === SECTIONS ===
         for (var i = 0; i < order.length; i++) {
             var key = order[i];
             var section = SessionEditor.sessionData.sections[key] || { triggers: [] };
@@ -607,12 +641,14 @@ var SessionEditor = {
             var dur = SessionEditor.calculateDuration(triggers);
             var count = triggers.length;
             var isOpen = SessionEditor._openSections[key] || false;
+            var bg = pastelBg[key] || 'transparent';
+            var border = pastelBorder[key] || '#333';
 
             var sectionEnabled = (section.enabled !== false);
             var sectionOpacity = sectionEnabled ? '1' : '0.35';
 
-            html += '<div class="session-section" data-section="' + key + '" style="opacity:' + sectionOpacity + ';">';
-            html += '  <div class="session-section-header" style="cursor:pointer; background:#2a2a2a; padding:10px 12px; border:1px solid #333; border-radius:4px; margin-bottom:2px; display:flex; align-items:center; gap:10px;">';
+            html += '<div class="session-section" data-section="' + key + '" style="opacity:' + sectionOpacity + '; margin-bottom:6px;">';
+            html += '  <div class="session-section-header" style="cursor:pointer; background:' + bg + '; padding:10px 12px; border:1px solid ' + border + '; border-radius:4px; display:flex; align-items:center; gap:10px;">';
             var secToggleIcon = sectionEnabled ? 'fa-toggle-on' : 'fa-toggle-off';
             var secToggleColor = sectionEnabled ? '#1DB954' : '#555';
             html += '    <i class="fas ' + secToggleIcon + ' cursor" style="color:' + secToggleColor + '; font-size:16px;" onclick="event.stopPropagation(); SessionEditor.toggleSectionEnabled(\'' + key + '\')" title="' + _t('Activer/Désactiver la section') + '"></i>';
@@ -621,7 +657,7 @@ var SessionEditor = {
             html += '    <span onclick="SessionEditor.toggleSection(\'' + key + '\')" style="color:#aaa; font-size:12px; font-family:monospace; cursor:pointer;">' + dur + '</span>';
             html += '    <i class="fas ' + (isOpen ? 'fa-chevron-down' : 'fa-chevron-right') + ' session-section-chevron" style="color:#666; transition:transform 0.2s; cursor:pointer;" onclick="SessionEditor.toggleSection(\'' + key + '\')"></i>';
             html += '  </div>';
-            html += '  <div class="session-section-body" data-section="' + key + '" style="' + (isOpen ? '' : 'display:none;') + ' border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; margin-bottom:8px; background:#222;">';
+            html += '  <div class="session-section-body" data-section="' + key + '" style="' + (isOpen ? '' : 'display:none;') + ' border:1px solid ' + border + '; border-top:none; border-radius:0 0 4px 4px; padding:10px; background:' + bg + ';">';
             html += SessionEditor.renderTriggerList(triggers, key);
             html += '    <div style="margin-top:8px; display:flex; gap:6px;">';
             html += '      <button class="btn btn-xs btn-primary" onclick="SessionEditor.addMedia(\'' + key + '\')"><i class="fas fa-film"></i> ' + _t('Média') + '</button>';
@@ -659,16 +695,7 @@ var SessionEditor = {
             html += '</div>';
         }
 
-        html += '<div style="margin-top:8px; text-align:right;">';
-        html += '  <select id="session-audio-profile" style="display:inline-block; width:auto; font-size:11px; padding:2px 6px; height:24px; background:#333; color:#fff; border:1px solid #555; border-radius:3px; margin-right:8px;" onchange="SessionEditor.setAudioProfile(this.value)" title="' + _t('Profil audio') + '">';
-        html += '    <option value="cinema">' + _t('Cinéma') + '</option>';
-        html += '    <option value="night">' + _t('Nuit') + '</option>';
-        html += '    <option value="thx">THX</option>';
-        html += '  </select>';
-        html += '  <button class="btn btn-xs btn-default" onclick="SessionEditor.collapseAll()"><i class="fas fa-compress-alt"></i> ' + _t('Tout replier') + '</button>';
-        html += '</div>';
-
-        html += '<div style="margin-top:8px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
+        html += '<div style="margin-top:12px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
         html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale estimée') + ' : <strong style="color:#fff;" id="session-total-duration">' + SessionEditor.calculateTotalDuration() + '</strong></span>';
         html += '  <div style="display:flex; gap:6px;">';
         html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
