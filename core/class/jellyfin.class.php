@@ -1692,6 +1692,46 @@ public function remoteControl($commandName, $_options = null) {
         return (int)max(0, min(100, $volume));
     }
 
+    /**
+     * Applique le profil audio immédiatement sur le clip en cours.
+     * Appelé quand l'utilisateur change de profil pendant la lecture.
+     */
+    private static function applyProfileNow($playerEq, $type) {
+        $playerId = $playerEq->getId();
+        $cacheKey = 'jellyfin::active_session::' . $playerId;
+        $engineState = json_decode(cache::byKey($cacheKey)->getValue('{}'), true);
+        if (!is_array($engineState) || empty($engineState['session_eqlogic_id'])) return;
+
+        $sessionEq = self::byId($engineState['session_eqlogic_id']);
+        if (!is_object($sessionEq)) return;
+
+        $sessionData = $sessionEq->getConfiguration('session_data');
+        $sessionType = $sessionEq->getConfiguration('session_type');
+        $currentIndex = $engineState['current_trigger_index'] ?? 0;
+
+        // Trouver le trigger courant
+        $trigger = null;
+        $sectionKey = '';
+        if ($sessionType == 'cinema') {
+            $currentSection = $engineState['current_section'] ?? '';
+            $triggers = $sessionData['sections'][$currentSection]['triggers'] ?? [];
+            if (isset($triggers[$currentIndex])) {
+                $trigger = $triggers[$currentIndex];
+                $sectionKey = $currentSection;
+            }
+        } else {
+            $playlist = $sessionData['playlist'] ?? [];
+            if (isset($playlist[$currentIndex])) {
+                $trigger = $playlist[$currentIndex];
+                $sectionKey = 'commercial';
+            }
+        }
+
+        if ($trigger && $trigger['type'] == 'media') {
+            self::applyVolume($playerEq, $trigger, $sectionKey);
+        }
+    }
+
     private static function collectAllRemainingMediaIds($sections, $currentSection, $currentIndex) {
         $mediaIds = [];
         $sectionOrder = self::SECTION_ORDER;
@@ -2010,6 +2050,10 @@ class jellyfinCmd extends cmd {
             if (in_array($value, ['night', 'cinema', 'thx', 'manual'])) {
                 $eqLogic->checkAndUpdateCmd('audio_profile', $value);
                 log::add('jellyfin', 'info', 'Profil audio cinéma: ' . $value);
+                // Appliquer immédiatement au clip en cours
+                if ($value != 'manual') {
+                    self::applyProfileNow($eqLogic, 'cinema');
+                }
             }
             return;
         }
@@ -2018,6 +2062,10 @@ class jellyfinCmd extends cmd {
             if (in_array($value, ['mute', 'quiet', 'normal', 'loud', 'manual'])) {
                 $eqLogic->checkAndUpdateCmd('commercial_audio_profile', $value);
                 log::add('jellyfin', 'info', 'Profil audio commercial: ' . $value);
+                // Appliquer immédiatement au clip en cours
+                if ($value != 'manual') {
+                    self::applyProfileNow($eqLogic, 'commercial');
+                }
             }
             return;
         }
