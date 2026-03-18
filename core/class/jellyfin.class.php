@@ -1418,6 +1418,24 @@ public function remoteControl($commandName, $_options = null) {
                 unset($engineState['media_launch_at']);
                 unset($engineState['launch_retries']);
             }
+
+            // Resync commercial : détecter l'auto-avancement du client
+            if ($status == 'Playing' && !empty($itemId) && !empty($currentMediaId) && $itemId != $currentMediaId) {
+                // Chercher le nouvel item dans la playlist
+                foreach ($playlist as $idx => $pItem) {
+                    if ($pItem['type'] == 'media' && $pItem['media_id'] == $itemId) {
+                        $engineState['current_trigger_index'] = $idx;
+                        $engineState['current_media_id'] = $itemId;
+                        $engineState['queued'] = true;
+                        unset($engineState['media_launch_at']);
+                        unset($engineState['stopped_since']);
+                        // Volume ampli pour le nouveau clip
+                        self::applyVolume($playerEq, $pItem, 'commercial');
+                        log::add('jellyfin', 'info', 'Commercial auto-avancement: index ' . $idx);
+                        break;
+                    }
+                }
+            }
         }
 
         $nextAnticipation = (float)config::byKey('next_anticipation', 'jellyfin', 0.5);
