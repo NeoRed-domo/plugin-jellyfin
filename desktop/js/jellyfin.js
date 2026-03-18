@@ -1287,7 +1287,8 @@ var SessionEditor = {
                         var errs = (p.errors || []).length;
                         $('#analysis-bar').css('width', '100%');
                         $('#analysis-status').html('<i class="fas fa-check" style="color:#1DB954;"></i> ' + total + ' clip(s) ' + _t('normalisé(s)') + (errs > 0 ? ' (' + errs + ' ' + _t('erreur(s)') + ')' : ''));
-                        setTimeout(function() { bootbox.hideAll(); SessionEditor.reload(); }, 2000);
+                        // Ajouter bouton fermer (ne se ferme plus automatiquement)
+                        $('#audio-analysis-progress').append('<div style="text-align:center; margin-top:15px;"><button class="btn btn-sm btn-success" onclick="bootbox.hideAll(); SessionEditor.reload();"><i class="fas fa-check"></i> ' + _t('Fermer') + '</button></div>');
                     }
                 }
             });
