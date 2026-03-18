@@ -1558,11 +1558,20 @@ public function remoteControl($commandName, $_options = null) {
         }
 
         // Commande ffmpeg
-        // -vn : ignore vidéo, -ac 2 : downmix en stéréo, -f wav : format streamable (évite le bug MP4 moov atom en pipe)
-        $cmd = 'curl -s "' . $streamUrl . '" | ffmpeg -i pipe:0 -vn -ac 2 -c:a pcm_s16le -f wav pipe:1 2>/dev/null '
-             . '| ffmpeg -i pipe:0 ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
+        // Télécharger dans un fichier temp puis analyser (seule méthode fiable pour MP4 + MKV + tous formats)
+        $tmpFile = jeedom::getTmpFolder('jellyfin') . '/lufs_analysis_' . $mediaId . '.tmp';
+        $dlCmd = 'curl -s -o ' . escapeshellarg($tmpFile) . ' "' . $streamUrl . '"';
+        exec($dlCmd, $dlOutput, $dlReturn);
+
+        if ($dlReturn != 0 || !file_exists($tmpFile) || filesize($tmpFile) < 1000) {
+            @unlink($tmpFile);
+            return ['error' => 'Impossible de télécharger le média depuis Jellyfin'];
+        }
+
+        $cmd = 'ffmpeg -i ' . escapeshellarg($tmpFile) . ' -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
         $output = [];
         exec($cmd, $output, $returnVar);
+        @unlink($tmpFile);
         $fullOutput = implode("\n", $output);
 
         // Parser le LUFS
