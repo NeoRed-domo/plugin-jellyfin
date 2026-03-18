@@ -689,7 +689,7 @@ if (init('action') == 'add') {
                 $errors[] = ['media_id' => $item['media_id'], 'name' => $item['name'], 'error' => $lufsResult['error']];
             } else {
                 $lufs = $lufsResult['lufs'];
-                $volumeAuto = jellyfin::calculateAutoVolume($playerEq, $lufs, $item['section']);
+                $volumeAuto = jellyfin::calculateAutoVolume($playerEq, $lufs);
                 $results[] = ['media_id' => $item['media_id'], 'lufs' => $lufs, 'volume_auto' => $volumeAuto];
 
                 if ($sessionType == 'cinema') {

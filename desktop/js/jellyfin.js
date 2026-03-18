@@ -659,7 +659,16 @@ var SessionEditor = {
             html += '</div>';
         }
 
-        html += '<div style="margin-top:15px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
+        html += '<div style="margin-top:8px; text-align:right;">';
+        html += '  <select id="session-audio-profile" style="display:inline-block; width:auto; font-size:11px; padding:2px 6px; height:24px; background:#333; color:#fff; border:1px solid #555; border-radius:3px; margin-right:8px;" onchange="SessionEditor.setAudioProfile(this.value)" title="' + _t('Profil audio') + '">';
+        html += '    <option value="cinema">' + _t('Cinéma') + '</option>';
+        html += '    <option value="night">' + _t('Nuit') + '</option>';
+        html += '    <option value="thx">THX</option>';
+        html += '  </select>';
+        html += '  <button class="btn btn-xs btn-default" onclick="SessionEditor.collapseAll()"><i class="fas fa-compress-alt"></i> ' + _t('Tout replier') + '</button>';
+        html += '</div>';
+
+        html += '<div style="margin-top:8px; padding:10px; background:#1a1a1a; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">';
         html += '  <span style="color:#aaa; font-size:13px;"><i class="fas fa-clock"></i> ' + _t('Durée totale estimée') + ' : <strong style="color:#fff;" id="session-total-duration">' + SessionEditor.calculateTotalDuration() + '</strong></span>';
         html += '  <div style="display:flex; gap:6px;">';
         html += '    <button class="btn btn-sm btn-success" onclick="SessionEditor.startSession()"><i class="fas fa-play"></i> ' + _t('Lancer') + '</button>';
@@ -694,6 +703,29 @@ var SessionEditor = {
 
         // Démarrer le polling monitoring
         SessionEditor.startMonitoring();
+
+        // Charger le profil audio actuel du lecteur
+        if (SessionEditor.sessionData && SessionEditor.sessionData.player_id) {
+            $.ajax({
+                type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                data: { action: 'get_player_cmd_ids', player_id: SessionEditor.sessionData.player_id },
+                dataType: 'json', global: false,
+                success: function(data) {
+                    if (data.state == 'ok' && data.result.audio_profile) {
+                        $.ajax({
+                            type: 'POST', url: 'core/ajax/cmd.ajax.php',
+                            data: { action: 'execCmd', id: data.result.audio_profile },
+                            dataType: 'json', global: false,
+                            success: function(cmdData) {
+                                if (cmdData.state == 'ok' && cmdData.result) {
+                                    $('#session-audio-profile').val(cmdData.result);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        }
     },
 
     renderCommercial: function() {
@@ -981,6 +1013,34 @@ var SessionEditor = {
             SessionEditor.setTriggers(sectionKey, triggers);
             SessionEditor.save(function() { SessionEditor.reload(); });
         });
+    },
+
+    setAudioProfile: function(profile) {
+        if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) return;
+        // Trouver l'ID de la commande set_audio_profile du lecteur
+        $.ajax({
+            type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+            data: { action: 'get_player_cmd_ids', player_id: SessionEditor.sessionData.player_id },
+            dataType: 'json', global: false,
+            success: function(data) {
+                if (data.state == 'ok' && data.result.set_audio_profile) {
+                    $.ajax({
+                        type: 'POST', url: 'core/ajax/cmd.ajax.php',
+                        data: { action: 'execCmd', id: data.result.set_audio_profile, value: JSON.stringify({select: profile}) },
+                        dataType: 'json', global: false,
+                        success: function() {
+                            $('#div_alert').showAlert({ message: _t('Profil audio') + ' : ' + profile, level: 'success' });
+                        }
+                    });
+                }
+            }
+        });
+    },
+
+    collapseAll: function() {
+        $('.session-section-body').slideUp(200);
+        $('.session-section-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-right');
+        SessionEditor._openSections = {};
     },
 
     toggleSection: function(sectionKey) {

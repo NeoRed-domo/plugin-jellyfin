@@ -1495,12 +1495,13 @@ public function remoteControl($commandName, $_options = null) {
         if (isset($trigger['volume']) && $trigger['volume'] !== '' && $trigger['volume'] !== null) {
             $volume = (int)$trigger['volume'];
         }
-        // 2. Volume auto (calculé par normalisation LUFS) + profil dynamique
+        // 2. Volume auto (LUFS normalisé, sans offset section ni profil) + offsets en live
         elseif (isset($trigger['volume_auto']) && $trigger['volume_auto'] !== '' && $trigger['volume_auto'] !== null) {
+            $sectionOffset = (float)config::byKey('audio_offset_' . $sectionKey, 'jellyfin', 0);
             $profileCmd = $playerEq->getCmd('info', 'audio_profile');
             $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'cinema';
             $profileOffset = (float)config::byKey('audio_profile_' . $profile, 'jellyfin', 0);
-            $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $profileOffset));
+            $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
         }
         // 3. Volume par défaut
         else {
@@ -1601,12 +1602,12 @@ public function remoteControl($commandName, $_options = null) {
         return ['error' => 'Impossible de mesurer le LUFS', 'output' => substr($fullOutput, -500)];
     }
 
-    public static function calculateAutoVolume($playerEq, $clipLufs, $sectionKey) {
+    public static function calculateAutoVolume($playerEq, $clipLufs) {
+        // Calcul SANS offset section ni profil — ces offsets sont appliqués en live dans applyVolume
         $refVolume = (float)$playerEq->getConfiguration('audio_ref_volume', 0);
         $refLufs = (float)$playerEq->getConfiguration('audio_ref_lufs', -23);
-        $sectionOffset = (float)config::byKey('audio_offset_' . $sectionKey, 'jellyfin', 0);
         $compensation = (float)config::byKey('audio_calibration_compensation', 'jellyfin', 4);
-        $volume = $refVolume + $compensation + ($refLufs - $clipLufs) + $sectionOffset;
+        $volume = $refVolume + $compensation + ($refLufs - $clipLufs);
         return (int)max(0, min(100, $volume));
     }
 
