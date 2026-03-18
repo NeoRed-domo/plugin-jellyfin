@@ -1217,7 +1217,7 @@ public function remoteControl($commandName, $_options = null) {
         }
 
 
-        self::updateSessionProgress($sessionEq, $sessionData, $engineState);
+        self::updateSessionProgress($sessionEq, $sessionData, $engineState, $positionTicks);
         cache::set($cacheKey, json_encode($engineState));
     }
 
@@ -1480,7 +1480,7 @@ public function remoteControl($commandName, $_options = null) {
             }
         }
 
-        self::updateSessionProgress($sessionEq, $sessionData, $engineState);
+        self::updateSessionProgress($sessionEq, $sessionData, $engineState, $positionTicks);
         cache::set($cacheKey, json_encode($engineState));
     }
 
@@ -1899,29 +1899,45 @@ public function remoteControl($commandName, $_options = null) {
         cache::set($cacheKey, json_encode($engineState));
     }
 
-    private static function updateSessionProgress($sessionEq, $sessionData, $engineState) {
+    private static function updateSessionProgress($sessionEq, $sessionData, $engineState, $positionTicks = 0) {
         $sessionType = $sessionEq->getConfiguration('session_type');
-        $totalTriggers = 0;
-        $completedTriggers = 0;
+        $totalDuration = 0;
+        $elapsedDuration = 0;
+        $currentIndex = $engineState['current_trigger_index'] ?? 0;
 
         if ($sessionType == 'cinema') {
-            $currentSectionIdx = array_search($engineState['current_section'], self::SECTION_ORDER);
+            $currentSection = $engineState['current_section'] ?? '';
+            $currentSectionIdx = array_search($currentSection, self::SECTION_ORDER);
             foreach (self::SECTION_ORDER as $idx => $key) {
-                $count = count($sessionData['sections'][$key]['triggers'] ?? []);
-                $totalTriggers += $count;
-                if ($idx < $currentSectionIdx) {
-                    $completedTriggers += $count;
-                } elseif ($idx == $currentSectionIdx) {
-                    $completedTriggers += $engineState['current_trigger_index'];
+                $sec = $sessionData['sections'][$key] ?? [];
+                if (isset($sec['enabled']) && $sec['enabled'] === false) continue;
+                foreach ($sec['triggers'] ?? [] as $tIdx => $trigger) {
+                    if ($trigger['type'] != 'media' || (isset($trigger['enabled']) && $trigger['enabled'] === false)) continue;
+                    $dur = $trigger['duration_ticks'] ?? 0;
+                    $totalDuration += $dur;
+                    if ($idx < $currentSectionIdx) {
+                        $elapsedDuration += $dur;
+                    } elseif ($idx == $currentSectionIdx && $tIdx < $currentIndex) {
+                        $elapsedDuration += $dur;
+                    } elseif ($idx == $currentSectionIdx && $tIdx == $currentIndex) {
+                        $elapsedDuration += $positionTicks;
+                    }
                 }
             }
         } else {
-            $totalTriggers = count($sessionData['playlist'] ?? []);
-            $completedTriggers = $engineState['current_trigger_index'] ?? 0;
+            foreach ($sessionData['playlist'] ?? [] as $tIdx => $trigger) {
+                if ($trigger['type'] != 'media' || (isset($trigger['enabled']) && $trigger['enabled'] === false)) continue;
+                $dur = $trigger['duration_ticks'] ?? 0;
+                $totalDuration += $dur;
+                if ($tIdx < $currentIndex) {
+                    $elapsedDuration += $dur;
+                } elseif ($tIdx == $currentIndex) {
+                    $elapsedDuration += $positionTicks;
+                }
+            }
         }
 
-        // +0.5 = le clip en cours est "à moitié" complété (évite 0% sur le premier clip)
-        $progress = ($totalTriggers > 0) ? min(100, round((($completedTriggers + 0.5) / $totalTriggers) * 100)) : 0;
+        $progress = ($totalDuration > 0) ? min(100, round(($elapsedDuration / $totalDuration) * 100)) : 0;
         $sessionEq->checkAndUpdateCmd('progress', $progress);
     }
 
