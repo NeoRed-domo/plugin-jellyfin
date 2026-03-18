@@ -791,7 +791,7 @@ var SessionEditor = {
         html += '    <span style="color:#888; font-size:12px;">' + playlist.length + ' ' + _t('média(s)') + '</span>';
         html += '    <span style="color:#aaa; font-size:12px; font-family:monospace;">' + dur + '</span>';
         html += '  </div>';
-        html += '  <div style="border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; background:#222;">';
+        html += '  <div class="session-section-body" data-section="playlist" style="border:1px solid #333; border-top:none; border-radius:0 0 4px 4px; padding:10px; background:#222;">';
         html += SessionEditor.renderTriggerList(playlist, 'playlist');
         html += '    <div style="margin-top:8px;">';
         html += '      <button class="btn btn-xs btn-primary" onclick="SessionEditor.addMedia(\'playlist\')"><i class="fas fa-film"></i> ' + _t('Média') + '</button>';
@@ -1250,10 +1250,13 @@ var SessionEditor = {
                         var activeIndex = es.current_trigger_index;
                         if (activeSection) {
                             var $sec = $('.session-section[data-section="' + activeSection + '"]');
-                            $sec.addClass('session-active-section');
-                            // Halo sur le trigger en cours (Nième div enfant dans le body)
+                            // Halo section uniquement pour cinéma (inutile en commercial, 1 seule section)
+                            if (activeSection !== 'playlist') {
+                                $sec.addClass('session-active-section');
+                            }
+                            // Halo sur le trigger en cours
                             var $body = $sec.find('.session-section-body');
-                            if ($body.is(':visible') && activeIndex !== undefined) {
+                            if (activeIndex !== undefined) {
                                 $body.find('div[style*="background"]').eq(activeIndex).addClass('session-trigger-active');
                             }
                         }
