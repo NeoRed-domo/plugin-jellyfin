@@ -1558,8 +1558,9 @@ public function remoteControl($commandName, $_options = null) {
         }
 
         // Commande ffmpeg
-        // -vn : ignore vidéo, -ac 2 : downmix en stéréo (compare DD5.1/AAC2.0/DD2.0 sur la même base)
-        $cmd = 'curl -s "' . $streamUrl . '" | ffmpeg -i pipe:0 -vn -ac 2 ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
+        // -vn : ignore vidéo, -ac 2 : downmix en stéréo, -f wav : format streamable (évite le bug MP4 moov atom en pipe)
+        $cmd = 'curl -s "' . $streamUrl . '" | ffmpeg -i pipe:0 -vn -ac 2 -c:a pcm_s16le -f wav pipe:1 2>/dev/null '
+             . '| ffmpeg -i pipe:0 ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
         $output = [];
         exec($cmd, $output, $returnVar);
         $fullOutput = implode("\n", $output);
@@ -1567,6 +1568,10 @@ public function remoteControl($commandName, $_options = null) {
         // Parser le LUFS
         if (preg_match('/"input_i"\s*:\s*"([^"]+)"/', $fullOutput, $matches)) {
             $lufs = (float)$matches[1];
+            // Vérifier que le LUFS est valide (pas -inf, pas 0 aberrant)
+            if (is_infinite($lufs) || is_nan($lufs)) {
+                return ['error' => 'LUFS invalide (-inf). Le fichier est peut-être corrompu ou vide.'];
+            }
             cache::set('jellyfin::lufs::' . $mediaId, $lufs);
             return ['lufs' => $lufs, 'cached' => false];
         }
