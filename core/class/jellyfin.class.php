@@ -1308,6 +1308,12 @@ public function remoteControl($commandName, $_options = null) {
             $previousSection = $engineState['current_section'];
             self::transitionTo($sessionEq, $engineState, $next, $previousSection);
 
+            // Écriture cache IMMÉDIATE avant les appels lents (applyVolume, playMedia)
+            // pour éviter le double-fire par les ticks concurrents du daemon
+            $engineState['media_launch_at'] = time();
+            $engineState['queued'] = false;
+            cache::set($cacheKey, json_encode($engineState));
+
             // Volume ampli si configuré
             $sectionKey = ($next['section'] == 'playlist') ? 'commercial' : $next['section'];
             self::applyVolume($playerEq, $next['trigger'], $sectionKey);
@@ -1325,10 +1331,7 @@ public function remoteControl($commandName, $_options = null) {
                 return;
             }
 
-            $engineState['media_launch_at'] = time();
-            $engineState['queued'] = false;
             log::add('jellyfin', 'info', 'Lancement: ' . $next['trigger']['media_id'] . ' (section: ' . $next['section'] . '[' . $next['index'] . '])');
-            cache::set($cacheKey, json_encode($engineState));
         } else {
             log::add('jellyfin', 'info', 'Plus de médias à jouer. Fin de séance.');
             $sessionEq->stopSession();
@@ -1864,6 +1867,12 @@ public function remoteControl($commandName, $_options = null) {
 
             if ($trigger['type'] == 'media') {
                 $engineState['current_media_id'] = $trigger['media_id'];
+
+                // Écriture cache IMMÉDIATE avant les appels lents (applyVolume, playMediaPlaylist)
+                // pour éviter le double-fire par les ticks concurrents du daemon
+                $engineState['media_launch_at'] = time();
+                cache::set($cacheKey, json_encode($engineState));
+
                 $sectionKey = ($sessionType == 'commercial') ? 'commercial' : $section;
                 self::applyVolume($playerEq, $trigger, $sectionKey);
 
@@ -1890,7 +1899,7 @@ public function remoteControl($commandName, $_options = null) {
                     log::add('jellyfin', 'debug', 'PlayNow playlist: ' . count($allMediaIds) . ' médias');
                 }
 
-                $engineState['media_launch_at'] = time();
+                // Mettre à jour queued dans le cache
                 cache::set($cacheKey, json_encode($engineState));
                 return;
             }
