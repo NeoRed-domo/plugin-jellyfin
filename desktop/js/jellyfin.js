@@ -1677,8 +1677,8 @@ var AudioCalibration = {
                 });
 
                 $('#calib-pick-media').on('click', function() {
-                    var $m = modal;
-                    $m.css('z-index', 0);
+                    var $calibModal = modal;
+                    $calibModal.css('z-index', 0);
                     if (typeof JellyfinBrowser !== 'undefined') {
                         JellyfinBrowser.open(AudioCalibration.playerId || '', '');
                         setTimeout(function() {
@@ -1688,10 +1688,14 @@ var AudioCalibration = {
                                 if (JellyfinBrowser.selectedItem) {
                                     AudioCalibration.mediaId = JellyfinBrowser.selectedItem.Id;
                                     AudioCalibration.mediaName = JellyfinBrowser.selectedItem.Name;
+                                }
+                                // Fermer SEULEMENT le JellyfinBrowser, pas la calibration
+                                $('.jellyfin-modal-fullscreen').modal('hide');
+                                // Restaurer la modale de calibration
+                                $calibModal.css('z-index', '');
+                                // Mettre à jour l'affichage du média
+                                if (AudioCalibration.mediaId) {
                                     $('#calib-media-display').html('<i class="fas fa-film" style="color:#3498db;"></i> ' + AudioCalibration.mediaName);
-                                    bootbox.hideAll();
-                                    $m.css('z-index', '');
-                                    AudioCalibration.open(); // Reopen calibration
                                 }
                                 return false;
                             });
