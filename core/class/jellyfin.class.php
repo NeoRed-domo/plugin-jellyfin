@@ -1560,13 +1560,16 @@ public function remoteControl($commandName, $_options = null) {
         // Commande ffmpeg
         // Télécharger dans un fichier temp puis analyser (seule méthode fiable pour MP4 + MKV + tous formats)
         $tmpFile = jeedom::getTmpFolder('jellyfin') . '/lufs_analysis_' . $mediaId . '.tmp';
-        $dlCmd = 'curl -s -o ' . escapeshellarg($tmpFile) . ' "' . $streamUrl . '"';
+        $dlCmd = 'curl -s -f --max-time 300 -o ' . escapeshellarg($tmpFile) . ' "' . $streamUrl . '" 2>&1';
         exec($dlCmd, $dlOutput, $dlReturn);
+        $dlSize = file_exists($tmpFile) ? filesize($tmpFile) : 0;
 
-        if ($dlReturn != 0 || !file_exists($tmpFile) || filesize($tmpFile) < 1000) {
+        if ($dlReturn != 0 || $dlSize < 1000) {
+            log::add('jellyfin', 'warning', 'LUFS download failed: media=' . $mediaId . ' curl_exit=' . $dlReturn . ' size=' . $dlSize . ' output=' . implode(' ', $dlOutput));
             @unlink($tmpFile);
-            return ['error' => 'Impossible de télécharger le média depuis Jellyfin'];
+            return ['error' => 'Impossible de télécharger le média (curl code ' . $dlReturn . ', size ' . $dlSize . ')'];
         }
+        log::add('jellyfin', 'debug', 'LUFS download OK: ' . round($dlSize / 1024 / 1024, 1) . ' Mo');
 
         $cmd = 'ffmpeg -i ' . escapeshellarg($tmpFile) . ' -vn ' . $timeLimit . ' -af loudnorm=print_format=json -f null - 2>&1';
         $output = [];
