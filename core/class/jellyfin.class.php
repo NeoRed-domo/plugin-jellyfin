@@ -769,6 +769,7 @@ public function remoteControl($commandName, $_options = null) {
             'queued'             => false,
             'current_lighting'   => ($sessionType == 'cinema') ? $firstSection : '',
             'started_at'         => time(),
+            'loop_current'       => 1,
             'last_status'        => 'Playing'
         ];
 
@@ -1292,7 +1293,10 @@ public function remoteControl($commandName, $_options = null) {
                         break;
                     }
                 }
-                if ($next) log::add('jellyfin', 'info', 'Commercial: retour au début de la playlist');
+                if ($next) {
+                    $engineState['loop_current'] = ($engineState['loop_current'] ?? 1) + 1;
+                    log::add('jellyfin', 'info', 'Commercial: boucle ' . $engineState['loop_current']);
+                }
             }
         } else {
             $sections = $sessionData['sections'] ?? [];

@@ -825,6 +825,7 @@ var SessionEditor = {
         html += '    <div><i class="fas fa-film" style="color:#888;"></i> ' + _t('Média') + ': <strong id="monitor-title">-</strong></div>';
         html += '    <div><i class="fas fa-clock" style="color:#888;"></i> <strong id="monitor-position">--:--</strong> / <span id="monitor-duration">--:--</span></div>';
         html += '    <div><i class="fas fa-tasks" style="color:#888;"></i> ' + _t('Progression') + ': <strong id="monitor-progress">0</strong>%</div>';
+        html += '    <div><i class="fas fa-redo" style="color:#888;"></i> ' + _t('Boucle') + ': <strong id="monitor-loop">-</strong></div>';
         html += '  </div>';
         html += '  <div style="margin-top:8px; height:4px; background:#333; border-radius:2px;">';
         html += '    <div id="monitor-progress-bar" style="height:100%; background:#1DB954; border-radius:2px; width:0%; transition:width 0.5s;"></div>';
@@ -1232,6 +1233,15 @@ var SessionEditor = {
                     }
                     if (r.engine_state) {
                         var es = r.engine_state;
+                        // Afficher le compteur de boucle
+                        if (es.loop_current) {
+                            var loopTotal = SessionEditor.sessionData ? SessionEditor.sessionData.loop : true;
+                            var loopLabel = es.loop_current;
+                            if (loopTotal === true) loopLabel += '/' + _t('infini');
+                            else if (typeof loopTotal === 'number') loopLabel += '/' + loopTotal;
+                            else loopLabel += '/1';
+                            $('#monitor-loop').text(loopLabel);
+                        }
                         var debugParts = [];
                         if (es.current_section) debugParts.push('sec:' + es.current_section);
                         if (es.current_trigger_index !== undefined) debugParts.push('idx:' + es.current_trigger_index);
