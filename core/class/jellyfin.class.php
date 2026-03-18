@@ -405,7 +405,7 @@ class jellyfin extends eqLogic {
             if (is_object($profileInfo)) {
                 $setProfile->setValue($profileInfo->getId());
             }
-            $setProfile->setConfiguration('listValue', 'night|Nuit;cinema|Cinéma;thx|THX');
+            $setProfile->setConfiguration('listValue', 'night|Nuit;cinema|Cinéma;thx|THX;manual|Manuel');
             $setProfile->save();
             if (is_object($profileInfo) && $profileInfo->execCmd() == '') {
                 $this->checkAndUpdateCmd('audio_profile', 'cinema');
@@ -418,7 +418,7 @@ class jellyfin extends eqLogic {
             if (is_object($commProfileInfo)) {
                 $setCommProfile->setValue($commProfileInfo->getId());
             }
-            $setCommProfile->setConfiguration('listValue', 'mute|Muet;quiet|Discret;normal|Normal;loud|Fort');
+            $setCommProfile->setConfiguration('listValue', 'mute|Muet;quiet|Discret;normal|Normal;loud|Fort;manual|Manuel');
             $setCommProfile->save();
             if (is_object($commProfileInfo) && $commProfileInfo->execCmd() == '') {
                 $this->checkAndUpdateCmd('commercial_audio_profile', 'normal');
@@ -1554,13 +1554,15 @@ public function remoteControl($commandName, $_options = null) {
 
             // Profil : cinéma ou commercial selon le type de section
             // Les défauts sont codés ici car config::byKey retourne '' si non configuré
-            $commercialDefaults = ['mute' => 0, 'quiet' => -20, 'normal' => 0, 'loud' => 5];
-            $cinemaDefaults = ['night' => -20, 'cinema' => 0, 'thx' => 10];
+            $commercialDefaults = ['mute' => 0, 'quiet' => -20, 'normal' => 0, 'loud' => 5, 'manual' => null];
+            $cinemaDefaults = ['night' => -20, 'cinema' => 0, 'thx' => 10, 'manual' => null];
 
             if ($sectionKey == 'commercial') {
                 $profileCmd = $playerEq->getCmd('info', 'commercial_audio_profile');
                 $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'normal';
                 if (empty($profile)) $profile = 'normal';
+                // Manuel = bypass total, ne pas toucher au volume
+                if ($profile == 'manual') return;
                 // Muet = volume fixe
                 if ($profile == 'mute') {
                     $muteVol = config::byKey('audio_commercial_mute', 'jellyfin', '');
@@ -1574,6 +1576,8 @@ public function remoteControl($commandName, $_options = null) {
                 $profileCmd = $playerEq->getCmd('info', 'audio_profile');
                 $profile = is_object($profileCmd) ? $profileCmd->execCmd() : 'cinema';
                 if (empty($profile)) $profile = 'cinema';
+                // Manuel = bypass total
+                if ($profile == 'manual') return;
                 $cfgVal = config::byKey('audio_profile_' . $profile, 'jellyfin', '');
                 $profileOffset = ($cfgVal !== '') ? (float)$cfgVal : ($cinemaDefaults[$profile] ?? 0);
                 $volume = (int)max(0, min(100, (int)$trigger['volume_auto'] + $sectionOffset + $profileOffset));
@@ -2003,7 +2007,7 @@ class jellyfinCmd extends cmd {
         // Commandes profil audio
         if ($logicalId == 'set_audio_profile') {
             $value = isset($_options['select']) ? $_options['select'] : '';
-            if (in_array($value, ['night', 'cinema', 'thx'])) {
+            if (in_array($value, ['night', 'cinema', 'thx', 'manual'])) {
                 $eqLogic->checkAndUpdateCmd('audio_profile', $value);
                 log::add('jellyfin', 'info', 'Profil audio cinéma: ' . $value);
             }
@@ -2011,7 +2015,7 @@ class jellyfinCmd extends cmd {
         }
         if ($logicalId == 'set_commercial_audio_profile') {
             $value = isset($_options['select']) ? $_options['select'] : '';
-            if (in_array($value, ['mute', 'quiet', 'normal', 'loud'])) {
+            if (in_array($value, ['mute', 'quiet', 'normal', 'loud', 'manual'])) {
                 $eqLogic->checkAndUpdateCmd('commercial_audio_profile', $value);
                 log::add('jellyfin', 'info', 'Profil audio commercial: ' . $value);
             }

@@ -626,6 +626,7 @@ var SessionEditor = {
         html += '      <option value="cinema">' + _t('Cinéma') + '</option>';
         html += '      <option value="night">' + _t('Nuit') + '</option>';
         html += '      <option value="thx">THX</option>';
+        html += '      <option value="manual">' + _t('Manuel') + '</option>';
         html += '    </select>';
         html += '  </div>';
         html += '  <button class="btn btn-xs btn-default" onclick="SessionEditor.collapseAll()"><i class="fas fa-compress-alt"></i> ' + _t('Tout replier') + '</button>';
@@ -768,6 +769,7 @@ var SessionEditor = {
         html += '      <option value="quiet">' + _t('Discret') + '</option>';
         html += '      <option value="normal">' + _t('Normal') + '</option>';
         html += '      <option value="loud">' + _t('Fort') + '</option>';
+        html += '      <option value="manual">' + _t('Manuel') + '</option>';
         html += '    </select>';
         html += '  </div>';
         html += '</div>';
