@@ -1559,15 +1559,23 @@ public function remoteControl($commandName, $_options = null) {
 
         // Commande ffmpeg
         // Télécharger dans un fichier temp puis analyser (seule méthode fiable pour MP4 + MKV + tous formats)
-        $tmpFile = jeedom::getTmpFolder('jellyfin') . '/lufs_analysis_' . $mediaId . '.tmp';
+        // Utilise le répertoire data du plugin (pas /tmp qui peut être en tmpfs avec taille limitée)
+        $dataDir = __DIR__ . '/../../data';
+        if (!is_dir($dataDir)) @mkdir($dataDir, 0775, true);
+        $tmpFile = $dataDir . '/lufs_analysis_' . $mediaId . '.tmp';
         $dlCmd = 'curl -s -f --max-time 300 -o ' . escapeshellarg($tmpFile) . ' "' . $streamUrl . '" 2>&1';
         exec($dlCmd, $dlOutput, $dlReturn);
         $dlSize = file_exists($tmpFile) ? filesize($tmpFile) : 0;
 
-        if ($dlReturn != 0 || $dlSize < 1000) {
+        if ($dlSize < 10000) {
+            // Fichier trop petit ou absent = vrai échec
             log::add('jellyfin', 'warning', 'LUFS download failed: media=' . $mediaId . ' curl_exit=' . $dlReturn . ' size=' . $dlSize . ' output=' . implode(' ', $dlOutput));
             @unlink($tmpFile);
             return ['error' => 'Impossible de télécharger le média (curl code ' . $dlReturn . ', size ' . $dlSize . ')'];
+        }
+        if ($dlReturn != 0) {
+            // Curl a reporté une erreur mais le fichier est là — on tente l'analyse quand même
+            log::add('jellyfin', 'debug', 'LUFS download curl warning (code ' . $dlReturn . ') mais fichier OK: ' . round($dlSize / 1024 / 1024, 1) . ' Mo');
         }
         log::add('jellyfin', 'debug', 'LUFS download OK: ' . round($dlSize / 1024 / 1024, 1) . ' Mo');
 
