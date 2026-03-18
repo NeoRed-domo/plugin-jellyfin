@@ -1920,7 +1920,8 @@ public function remoteControl($commandName, $_options = null) {
             $completedTriggers = $engineState['current_trigger_index'] ?? 0;
         }
 
-        $progress = ($totalTriggers > 0) ? round(($completedTriggers / $totalTriggers) * 100) : 0;
+        // +0.5 = le clip en cours est "à moitié" complété (évite 0% sur le premier clip)
+        $progress = ($totalTriggers > 0) ? min(100, round((($completedTriggers + 0.5) / $totalTriggers) * 100)) : 0;
         $sessionEq->checkAndUpdateCmd('progress', $progress);
     }
 
