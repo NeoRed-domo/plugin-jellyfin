@@ -592,13 +592,17 @@ var SessionEditor = {
         });
     },
 
+    _glowStyles: function() {
+        return '<style>'
+            + '.session-active-section > .session-section-header, .session-active-section > div:first-child { box-shadow: 0 0 12px rgba(29, 185, 84, 0.6), inset 0 0 4px rgba(29, 185, 84, 0.15); border-color: #1DB954 !important; }'
+            + '.session-trigger-active { box-shadow: 0 0 8px rgba(29, 185, 84, 0.5); border: 1px solid rgba(29, 185, 84, 0.4) !important; border-radius: 4px; }'
+            + '@keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 8px rgba(29, 185, 84, 0.4); } 50% { box-shadow: 0 0 16px rgba(29, 185, 84, 0.7); } }'
+            + '.session-active-section > .session-section-header, .session-active-section > div:first-child { animation: pulse-glow 2s ease-in-out infinite; }'
+            + '</style>';
+    },
+
     renderCinema: function() {
-        var html = '<style>';
-        html += '.session-active-section > .session-section-header { box-shadow: 0 0 12px rgba(29, 185, 84, 0.6), inset 0 0 4px rgba(29, 185, 84, 0.15); border-color: #1DB954 !important; }';
-        html += '.session-trigger-active { box-shadow: 0 0 8px rgba(29, 185, 84, 0.5); border: 1px solid rgba(29, 185, 84, 0.4) !important; border-radius: 4px; }';
-        html += '@keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 8px rgba(29, 185, 84, 0.4); } 50% { box-shadow: 0 0 16px rgba(29, 185, 84, 0.7); } }';
-        html += '.session-active-section > .session-section-header { animation: pulse-glow 2s ease-in-out infinite; }';
-        html += '</style>';
+        var html = SessionEditor._glowStyles();
         var order = SessionEditor.sectionsMeta.order;
         var labels = SessionEditor.sectionsMeta.labels;
         var colors = SessionEditor.sectionsMeta.colors;
@@ -766,7 +770,8 @@ var SessionEditor = {
         var dur = SessionEditor.calculateDuration(playlist);
 
         // Barre d'outils en haut
-        var html = '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#1a1a1a; border:1px solid #333; border-radius:4px; margin-bottom:12px;">';
+        var html = SessionEditor._glowStyles();
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#1a1a1a; border:1px solid #333; border-radius:4px; margin-bottom:12px;">';
         html += '  <div style="display:flex; align-items:center; gap:10px;">';
         html += '    <span style="color:#888; font-size:11px; text-transform:uppercase;"><i class="fas fa-bullhorn"></i> ' + _t('Profil') + '</span>';
         html += '    <select id="session-commercial-profile" style="width:auto; font-size:12px; padding:3px 8px; height:28px; background:#333; color:#fff; border:1px solid #555; border-radius:3px;" onchange="SessionEditor.setCommercialProfile(this.value)">';
