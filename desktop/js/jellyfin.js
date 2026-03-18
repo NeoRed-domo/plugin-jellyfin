@@ -1122,18 +1122,13 @@ var SessionEditor = {
         if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) return;
         $.ajax({
             type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-            data: { action: 'get_player_cmd_ids', player_id: SessionEditor.sessionData.player_id },
-            dataType: 'json', global: false,
+            data: { action: 'set_audio_profile', player_id: SessionEditor.sessionData.player_id, profile: profile, type: 'commercial' },
+            dataType: 'json',
             success: function(data) {
-                if (data.state == 'ok' && data.result.set_commercial_audio_profile) {
-                    $.ajax({
-                        type: 'POST', url: 'core/ajax/cmd.ajax.php',
-                        data: { action: 'execCmd', id: data.result.set_commercial_audio_profile, value: JSON.stringify({select: profile}) },
-                        dataType: 'json', global: false,
-                        success: function() {
-                            $('#div_alert').showAlert({ message: _t('Profil commercial') + ' : ' + profile, level: 'success' });
-                        }
-                    });
+                if (data.state == 'ok') {
+                    $('#div_alert').showAlert({ message: _t('Profil commercial') + ' : ' + profile, level: 'success' });
+                } else {
+                    $('#div_alert').showAlert({ message: data.result || 'Erreur', level: 'danger' });
                 }
             }
         });
@@ -1141,21 +1136,15 @@ var SessionEditor = {
 
     setAudioProfile: function(profile) {
         if (!SessionEditor.sessionData || !SessionEditor.sessionData.player_id) return;
-        // Trouver l'ID de la commande set_audio_profile du lecteur
         $.ajax({
             type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
-            data: { action: 'get_player_cmd_ids', player_id: SessionEditor.sessionData.player_id },
-            dataType: 'json', global: false,
+            data: { action: 'set_audio_profile', player_id: SessionEditor.sessionData.player_id, profile: profile, type: 'cinema' },
+            dataType: 'json',
             success: function(data) {
-                if (data.state == 'ok' && data.result.set_audio_profile) {
-                    $.ajax({
-                        type: 'POST', url: 'core/ajax/cmd.ajax.php',
-                        data: { action: 'execCmd', id: data.result.set_audio_profile, value: JSON.stringify({select: profile}) },
-                        dataType: 'json', global: false,
-                        success: function() {
-                            $('#div_alert').showAlert({ message: _t('Profil audio') + ' : ' + profile, level: 'success' });
-                        }
-                    });
+                if (data.state == 'ok') {
+                    $('#div_alert').showAlert({ message: _t('Profil audio') + ' : ' + profile, level: 'success' });
+                } else {
+                    $('#div_alert').showAlert({ message: data.result || 'Erreur', level: 'danger' });
                 }
             }
         });

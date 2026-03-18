@@ -589,6 +589,31 @@ if (init('action') == 'add') {
         ]);
     }
 
+    if (init('action') == 'set_audio_profile') {
+        $playerId = init('player_id');
+        $profile = init('profile');
+        $type = init('type', 'cinema'); // cinema ou commercial
+        $player = jellyfin::byId($playerId);
+        if (!is_object($player)) throw new Exception(__('Lecteur introuvable', __FILE__));
+
+        if ($type == 'commercial') {
+            if (!in_array($profile, ['mute', 'quiet', 'normal', 'loud', 'manual'])) throw new Exception('Profil invalide');
+            $player->checkAndUpdateCmd('commercial_audio_profile', $profile);
+            log::add('jellyfin', 'info', 'Profil audio commercial: ' . $profile);
+            if ($profile != 'manual') {
+                jellyfin::applyProfileNow($player, 'commercial');
+            }
+        } else {
+            if (!in_array($profile, ['night', 'cinema', 'thx', 'manual'])) throw new Exception('Profil invalide');
+            $player->checkAndUpdateCmd('audio_profile', $profile);
+            log::add('jellyfin', 'info', 'Profil audio cinéma: ' . $profile);
+            if ($profile != 'manual') {
+                jellyfin::applyProfileNow($player, 'cinema');
+            }
+        }
+        ajax::success(['profile' => $profile]);
+    }
+
     if (init('action') == 'check_ffmpeg') {
         ajax::success(['available' => jellyfin::isFfmpegAvailable()]);
     }

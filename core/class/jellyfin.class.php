@@ -1696,7 +1696,7 @@ public function remoteControl($commandName, $_options = null) {
      * Applique le profil audio immédiatement sur le clip en cours.
      * Appelé quand l'utilisateur change de profil pendant la lecture.
      */
-    private static function applyProfileNow($playerEq, $type) {
+    public static function applyProfileNow($playerEq, $type) {
         $playerId = $playerEq->getId();
         $cacheKey = 'jellyfin::active_session::' . $playerId;
         $engineState = json_decode(cache::byKey($cacheKey)->getValue('{}'), true);
