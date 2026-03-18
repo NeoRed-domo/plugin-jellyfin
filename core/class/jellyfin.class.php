@@ -1150,6 +1150,8 @@ public function remoteControl($commandName, $_options = null) {
                         $sessionEq->checkAndUpdateCmd('current_section', self::SECTION_LABELS[$found['section']] ?? $found['section']);
                     }
                     log::add('jellyfin', 'info', 'Auto-avancement détecté: ' . $itemId . ' → section ' . $found['section'] . '[' . $found['index'] . ']');
+                    // Écriture cache immédiate (empêche le double-fire au tick suivant)
+                    cache::set($cacheKey, json_encode($engineState));
                     // Volume ampli pour le nouveau clip
                     $foundTriggers = $sections[$found['section']]['triggers'] ?? [];
                     if (isset($foundTriggers[$found['index']])) {
@@ -1448,6 +1450,8 @@ public function remoteControl($commandName, $_options = null) {
                         $engineState['queued'] = true;
                         unset($engineState['media_launch_at']);
                         unset($engineState['stopped_since']);
+                        // Écriture cache immédiate (empêche le double-fire)
+                        cache::set($cacheKey, json_encode($engineState));
                         // Volume ampli pour le nouveau clip
                         self::applyVolume($playerEq, $pItem, 'commercial');
                         log::add('jellyfin', 'info', 'Commercial auto-avancement: index ' . $idx);
