@@ -1780,10 +1780,20 @@ var AudioCalibration = {
 
                 $('#calib-stop').on('click', function() {
                     if (!AudioCalibration.playerId) return;
-                    // Stop via remote control
+                    // Récupérer la commande stop du lecteur et l'exécuter
                     $.ajax({
-                        type: 'POST', url: 'core/ajax/cmd.ajax.php',
-                        data: { action: 'execCmd', id: '' }, dataType: 'json', global: false
+                        type: 'POST', url: 'plugins/jellyfin/core/ajax/jellyfin.ajax.php',
+                        data: { action: 'get_player_cmd_ids', player_id: AudioCalibration.playerId },
+                        dataType: 'json', global: false,
+                        success: function(data) {
+                            if (data.state == 'ok' && data.result.stop) {
+                                $.ajax({
+                                    type: 'POST', url: 'core/ajax/cmd.ajax.php',
+                                    data: { action: 'execCmd', id: data.result.stop },
+                                    dataType: 'json', global: false
+                                });
+                            }
+                        }
                     });
                 });
 
