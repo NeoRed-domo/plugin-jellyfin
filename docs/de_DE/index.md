@@ -207,7 +207,6 @@ Wenn der Zuschauer mit der Fernbedienung pausiert, wird das „Pause"-Ambiente a
 1. **Vom Editor aus**: Schaltfläche „Lancer"
 2. **Vom Widget aus**: 🎬-Schaltfläche
 3. **Von einem Szenario aus**: Befehl `start`
-4. **Planung**: Schaltfläche „Programmer" mit Datum und Uhrzeit
 
 ---
 

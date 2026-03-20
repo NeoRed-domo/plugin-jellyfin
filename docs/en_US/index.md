@@ -207,7 +207,6 @@ If the viewer pauses with the remote control, the "Pause" mood is triggered. Whe
 1. **From the editor**: "Lancer" button
 2. **From the widget**: 🎬 button
 3. **From a scenario**: `start` command
-4. **Scheduling**: "Programmer" button with date and time
 
 ---
 

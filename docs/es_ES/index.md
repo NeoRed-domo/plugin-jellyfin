@@ -207,7 +207,6 @@ Si el espectador pone en pausa con el mando a distancia, se activa el ambiente "
 1. **Desde el editor**: botón "Lancer"
 2. **Desde el widget**: botón 🎬
 3. **Desde un escenario**: comando `start`
-4. **Programación**: botón "Programmer" con fecha y hora
 
 ---
 

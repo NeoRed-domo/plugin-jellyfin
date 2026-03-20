@@ -207,7 +207,6 @@ Si le spectateur met en pause avec sa télécommande, l'ambiance "Pause" se déc
 1. **Depuis l'éditeur** : bouton "Lancer"
 2. **Depuis le widget** : bouton 🎬
 3. **Depuis un scénario** : commande `start`
-4. **Programmation** : bouton "Programmer" avec date et heure
 
 ---
 
