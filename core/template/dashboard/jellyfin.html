@@ -229,10 +229,12 @@
             if (_options.cmd_id == '#status_id#') refreshStatus_#id#();
         }
 
-        if ('#position_id#' != '') jeedom.cmd.update['#position_id#'] = updateJellyfinWidget_#id#;
-        if ('#duration_id#' != '') jeedom.cmd.update['#duration_id#'] = updateJellyfinWidget_#id#;
-        if ('#status_id#'   != '') jeedom.cmd.update['#status_id#']   = updateJellyfinWidget_#id#;
-        if ('#cover_id#'    != '') jeedom.cmd.update['#cover_id#']    = updateJellyfinWidget_#id#;
+        if ('#position_id#'   != '') jeedom.cmd.update['#position_id#']   = updateJellyfinWidget_#id#;
+        if ('#duration_id#'   != '') jeedom.cmd.update['#duration_id#']   = updateJellyfinWidget_#id#;
+        if ('#status_id#'     != '') jeedom.cmd.update['#status_id#']     = updateJellyfinWidget_#id#;
+        if ('#cover_id#'      != '') jeedom.cmd.update['#cover_id#']      = updateJellyfinWidget_#id#;
+        if ('#title_id#'      != '') jeedom.cmd.update['#title_id#']      = updateJellyfinWidget_#id#;
+        if ('#media_type_id#' != '') jeedom.cmd.update['#media_type_id#'] = updateJellyfinWidget_#id#;
 
         if('#cover#' != '') refreshCover_#id#('#cover#');
         refreshStatus_#id#();
