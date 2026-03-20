@@ -268,19 +268,15 @@ class jellyfin extends eqLogic {
                 if ($itemType == 'Audio' && !isset($npItem['AlbumId']) && !isset($npItem['PrimaryImageItemId'])) $imageItemId = '';
 
                 $storedImageId = $eqLogic->getConfiguration('last_image_id', '');
-                if (!empty($baseUrl) && !empty($imageItemId) && $imageItemId !== $storedImageId) {
-                    $imgUrl = $baseUrl . '/Items/' . $imageItemId . '/Images/Primary?fillWidth=400&quality=90&api_key=' . $apikey;
-                    $imgData = self::requestApi($imgUrl, 'GET', null, true);
-                    if ($imgData && strlen($imgData) > 500) {
-                        $headerHex = bin2hex(substr($imgData, 0, 2));
-                        $mimeType = ($headerHex == '8950') ? 'image/png' : 'image/jpeg';
-                        
-                        $htmlImg = '<img class="img-responsive" data-media-id="' . $imageItemId . '" style="border-radius: 10px;" src="data:' . $mimeType . ';base64,' . base64_encode($imgData) . '">';
-                        
-                        $eqLogic->checkAndUpdateCmd('cover', $htmlImg);
-                        $eqLogic->setConfiguration('last_image_id', $imageItemId);
-                        $eqLogic->save();
-                    }
+                if (!empty($imageItemId) && $imageItemId !== $storedImageId) {
+                    $imageTag = isset($npItem['ImageTags']['Primary']) ? $npItem['ImageTags']['Primary'] : '';
+                    $proxyUrl = 'plugins/jellyfin/core/php/proxy.php?itemId=' . urlencode($imageItemId) . '&maxWidth=400';
+                    if ($imageTag) $proxyUrl .= '&tag=' . urlencode($imageTag);
+                    $htmlImg = '<img class="img-responsive" data-media-id="' . $imageItemId . '" style="border-radius: 10px;" src="' . $proxyUrl . '">';
+
+                    $eqLogic->checkAndUpdateCmd('cover', $htmlImg);
+                    $eqLogic->setConfiguration('last_image_id', $imageItemId);
+                    $eqLogic->save();
                 }
             }
             $cmdToggle = $eqLogic->getCmd(null, 'play_pause');
