@@ -191,9 +191,9 @@ class jellyfin extends eqLogic {
             $logicalId = (strlen($deviceId) > 120) ? md5($deviceId) : $deviceId;
             $eqLogic = self::byLogicalId($logicalId, 'jellyfin');
 
-            if (!$isControllable) {
+            if (!$isControllable && !$hasMedia) {
                 if (!is_object($eqLogic)) {
-                    log::add('jellyfin', 'debug', 'Session ignorée: non-contrôlable et pas d\'équipement existant (' . $shortId . ')');
+                    log::add('jellyfin', 'debug', 'Session ignorée: non-contrôlable, sans média et sans équipement existant (' . $shortId . ')');
                     continue;
                 }
             }
