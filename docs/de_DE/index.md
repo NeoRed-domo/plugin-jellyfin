@@ -287,3 +287,15 @@ ffmpeg muss installiert sein. Die Kalibrierung muss durchgeführt worden sein. D
 
 ### Die Lautstärke ist zu laut / zu leise
 Passen Sie die Offsets pro Abschnitt, die Rosa-Rauschen-Kompensation (+4 dB Standard) an, oder verwenden Sie das Profil „Manuel", um die manuelle Kontrolle zurückzuerlangen.
+
+### Befehle (Play, Pause, Stop) funktionieren nicht
+Wenn Ihr Jellyfin hinter einem **Reverse Proxy** (nginx, Apache, Caddy, Traefik...) läuft, müssen Sie die WebSocket-Weiterleitung aktivieren. Ohne diese können Clients keine WebSocket-Verbindung zum Server herstellen, und Jellyfin markiert alle Sitzungen als nicht steuerbar (`SupportsRemoteControl: false`).
+
+- **Nginx Proxy Manager**: Aktivieren Sie die Option „WebSocket Support" in der Proxy-Host-Konfiguration
+- **Manuelles Nginx**: Fügen Sie die Direktiven `proxy_set_header Upgrade $http_upgrade;` und `proxy_set_header Connection "upgrade";` hinzu
+- **Apache**: Aktivieren Sie die Module `mod_proxy_wstunnel` und `mod_rewrite`
+
+Starten Sie nach der Änderung Ihren Reverse Proxy neu und aktualisieren Sie Ihre Jellyfin-Clients.
+
+### Das Gerät wird nicht erstellt
+Geräte werden automatisch erstellt, wenn ein Medium abgespielt wird. Wenn kein Gerät erscheint, überprüfen Sie die `jellyfin`-Logs im Debug-Modus, um die erkannten Sitzungen und ihren Status zu sehen.

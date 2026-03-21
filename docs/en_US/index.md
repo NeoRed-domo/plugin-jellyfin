@@ -287,3 +287,15 @@ ffmpeg must be installed. Calibration must be completed. The volume command must
 
 ### Volume is too loud / too quiet
 Adjust the per-section offsets, the pink noise compensation (+4 dB by default), or use the "Manuel" profile to take back manual control.
+
+### Commands (play, pause, stop) do not work
+If your Jellyfin is behind a **reverse proxy** (nginx, Apache, Caddy, Traefik...), you need to enable WebSocket forwarding. Without it, clients cannot establish a WebSocket connection to the server, and Jellyfin marks all sessions as non-controllable (`SupportsRemoteControl: false`).
+
+- **Nginx Proxy Manager**: enable the "WebSocket Support" option in the proxy host configuration
+- **Manual Nginx**: add the directives `proxy_set_header Upgrade $http_upgrade;` and `proxy_set_header Connection "upgrade";`
+- **Apache**: enable the `mod_proxy_wstunnel` and `mod_rewrite` modules
+
+After the change, restart your reverse proxy and refresh your Jellyfin clients.
+
+### Equipment is not created
+Equipment is automatically created when media is playing. If no equipment appears, check the `jellyfin` logs in Debug mode to see detected sessions and their status.

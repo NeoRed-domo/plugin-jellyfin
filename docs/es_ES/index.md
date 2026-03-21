@@ -287,3 +287,15 @@ ffmpeg debe estar instalado. La calibración debe estar realizada. El comando de
 
 ### El volumen es demasiado alto / demasiado bajo
 Ajuste los offsets por sección, la compensación de ruido rosa (+4 dB por defecto), o use el perfil "Manuel" para retomar el control manual.
+
+### Los comandos (play, pause, stop) no funcionan
+Si su Jellyfin está detrás de un **reverse proxy** (nginx, Apache, Caddy, Traefik...), debe activar el reenvío de WebSockets. Sin esto, los clientes no pueden establecer una conexión WebSocket con el servidor, y Jellyfin marca todas las sesiones como no controlables (`SupportsRemoteControl: false`).
+
+- **Nginx Proxy Manager**: active la opción "WebSocket Support" en la configuración del proxy host
+- **Nginx manual**: añada las directivas `proxy_set_header Upgrade $http_upgrade;` y `proxy_set_header Connection "upgrade";`
+- **Apache**: active los módulos `mod_proxy_wstunnel` y `mod_rewrite`
+
+Tras la modificación, reinicie su reverse proxy y refresque sus clientes Jellyfin.
+
+### El equipo no se crea
+El equipo se crea automáticamente cuando un medio está en reproducción. Si no aparece ningún equipo, verifique los logs `jellyfin` en modo Debug para ver las sesiones detectadas y su estado.
