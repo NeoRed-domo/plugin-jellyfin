@@ -170,27 +170,36 @@ class jellyfin extends eqLogic {
             $deviceId = '';
             if (isset($sessionData['device_id'])) $deviceId = $sessionData['device_id'];
             elseif (isset($sessionData['DeviceId'])) $deviceId = $sessionData['DeviceId'];
-            
-            $clientName = isset($sessionData['client']) ? $sessionData['client'] : (isset($sessionData['Client']) ? $sessionData['Client'] : 'Jellyfin Device');
-            
-            if (empty($deviceId)) continue;
 
+            $clientName = isset($sessionData['client']) ? $sessionData['client'] : (isset($sessionData['Client']) ? $sessionData['Client'] : 'Jellyfin Device');
+
+            if (empty($deviceId)) {
+                log::add('jellyfin', 'debug', 'Session ignorée: deviceId vide (client=' . $clientName . ')');
+                continue;
+            }
+
+            $shortId = substr($deviceId, 0, 8) . '…';
             $activeDevices[] = (string)$deviceId;
 
             $isControllable = false;
             if (isset($sessionData['SupportsRemoteControl']) && $sessionData['SupportsRemoteControl'] === true) $isControllable = true;
             if (isset($sessionData['supports_remote_control']) && $sessionData['supports_remote_control'] === true) $isControllable = true;
 
+            $hasMedia = !empty($sessionData['item_id']);
+            log::add('jellyfin', 'debug', 'Session: ' . $shortId . ' | client=' . $clientName . ' | controllable=' . ($isControllable ? 'oui' : 'non') . ' | media=' . ($hasMedia ? 'oui' : 'non'));
+
             $logicalId = (strlen($deviceId) > 120) ? md5($deviceId) : $deviceId;
             $eqLogic = self::byLogicalId($logicalId, 'jellyfin');
-            
+
             if (!$isControllable) {
                 if (!is_object($eqLogic)) {
-                    continue; 
+                    log::add('jellyfin', 'debug', 'Session ignorée: non-contrôlable et pas d\'équipement existant (' . $shortId . ')');
+                    continue;
                 }
             }
 
             if (!is_object($eqLogic)) {
+                log::add('jellyfin', 'info', 'Nouvel équipement détecté: ' . $clientName . ' (' . $shortId . ')');
                 $eqLogic = new jellyfin();
                 $eqLogic->setName($clientName . ' - Jellyfin');
                 $eqLogic->setLogicalId($logicalId);
